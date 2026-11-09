@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security vulnerability"
+    url: https://rootnote.unravelnetworks.com/security/
+    about: "Never as a public issue. Email security@unravelnetworks.com as described on the security page."
+  - name: "How do I...?"
+    url: https://rootnote.unravelnetworks.com/guide/
+    about: "The step-by-step guide. For anything you would rather not post publicly, email support@unravelnetworks.com."

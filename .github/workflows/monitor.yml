@@ -1,0 +1,22 @@
+# Daily check that the live site still serves exactly the published release files, with the
+# approved security headers on every response (.github/check-live.sh).
+# Off until the site is live: set the repository variable ROOTNOTE_LIVE to true.
+# A failed run means a file or header differs (GitHub notifies the repository owner).
+name: Live site check
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    if: vars.ROOTNOTE_LIVE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Compare live files and security headers with what was published
+        run: bash .github/check-live.sh https://rootnote.unravelnetworks.com .github/published-sha256.txt

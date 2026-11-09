@@ -1,0 +1,891 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fieldnote:project:6",
+  "title": "Fieldnote project file, schemaVersion 6",
+  "$comment": "Every v1 validator rule still applies unless amended here. Amended or added rules, enforced by the app validator before any state is replaced: (1) raw file <= 26214400 bytes, checked before parsing, unchanged; (2)-(5) per-image decode, byte, sha256, signature and dimension rules unchanged; (6) image ids are unique. A screenshot reference is either a gallery entry (finding.evidence) or an image block (finding.details[type=image]). Every screenshot reference resolves to exactly one image, and each image is referenced by at most one screenshot reference across all findings, galleries and blocks, whether or not the containing section is enabled. project.branding.testerLogo.imageId and clientLogo.imageId, when non-null, each resolve to one image that is NOT referenced as a screenshot. The two logo roles may name the same image. Every image is referenced by a screenshot reference or by at least one logo role, otherwise the import is refused; (7) schemaVersion > 6 is refused as 'newer'. schemaVersion 1, 2, 3, 4 or 5 is validated against its own frozen schema and migrated step by step (v1 to v2: work/claude/26-schema-v2-notes.md; v2 to v3: work/claude/35-schema-v3-notes.md; v3 to v4: work/claude/70-schema-v4-notes.md; v4 to v5: append sections.report {key ratingMethod, label \"How findings are rated\", enabled false} and project.ratingMethod {text \"\"}, nothing else changes; v5 to v6: project.customSections [] (no report row is added), project.classificationDisplay {keyFacts true, summaryColumn false}, labels cwe \"CWE\", vulnerabilityType \"Vulnerability type\", classification \"Classification\", and cwe \"\" and vulnerabilityType \"\" on every finding, nothing else changes). The migrated result must pass this schema. Exception, in memory only: a migrated v1, v2, v3, v4 or v5 that fails ONLY the 25 MiB budget may be held in a recovery state (banner with measured overage, every mutation non-growth, Save and Export refused, exact original bytes downloadable). That exception applies only to an in-memory result migrated from a validated v1, v2, v3, v4 or v5 file; it never permits an over-budget native v6 import, save or export; (8) screenshot references (gallery entries plus image blocks) across all findings <= 30, so distinct images <= 32; (9) counters unchanged; (10) XML 1.0 text rule unchanged, applied to every string including labels, engagement rows and the prefix; (11) project.sections.report contains each report key exactly once, and project.sections.finding contains each finding key exactly once; (12) project.engagement.rows has at most one row per bound source other than 'custom'; (13) finding.cvss, when non-null, is a canonical CVSS 3.1 Base vector: prefix CVSS:3.1/, then exactly AV,AC,PR,UI,S,C,I,A once each, in that order, with valid values only. Temporal or Environmental metrics are refused. The score is never stored; it is derived by src/scoring; (14) the visible finding ID is derived as <prefix>-<1-based position>. A valid prefix is a string that, after trimming leading and trailing whitespace, has 1-40 characters, contains no CR, LF or tab, and is XML 1.0 valid. prefix = trimmed findingPrefix if valid, else trimmed engagementId if valid, else 'F'. An engagementId that is invalid as a prefix (for example longer than 40 characters) falls back to 'F' and is never truncated. The visible ID is never stored. Bookmarks use the stable F-NNN id; (15) back-to-summary links are exported only when backToSummaryLinks is true AND sections.report[key=findingsSummary].enabled is true, so no anchor ever dangles. Every internal hyperlink anchor resolves to exactly one bookmark. (16) finding.details: at most 100 blocks; block ids unique within the finding; the summed Unicode length of all text blocks of one finding is <= 20000 (the v2 details bound); empty text blocks are allowed. formats has no details key: each text block carries its own format; (17) figures are numbered in export order: findings in order, then enabled finding sections in sections.finding order, then blocks or gallery entries in array order. Screenshots in a disabled section are not exported and take no figure number. (18) finding.references: at most 20 entries; the summed Unicode length (UTF-16 units) of all titles and URLs of one finding is <= 20000, separate from the details budget; both limits apply whether or not the References section is enabled. A title is non-blank, single-line, already trimmed, <= 300 units and XML 1.0 valid. A URL is empty, or <= 2048 units, XML 1.0 valid, contains no whitespace, C0 control or DEL, parses with new URL() to protocol exactly http: or https:, has a non-empty hostname and no username or password. URLs are never fetched, resolved, normalised or rewritten. Duplicate references are allowed and kept in order. There is no formats.references: titles and URLs are literal text. (19) finding status is shown only where project.findingStatusDisplay asks: keyFacts adds one key-facts row; summaryColumn adds a column after the score columns and counts adds a status count table after the rating count tables, both only when sections.report[key=findingsSummary].enabled is true. Status never filters findings, rating counts, figures, links or exported content. Status display strings are fixed application strings; labels.status names the column, row and count table, and labels.statusNotSet shows null. (20) the Contents report section lists, in output order, every other emitted report section heading, then the Findings chapter and each finding (display ID and title) when there are findings. It excludes itself, the cover or title block, finding subsections, figures, references and count tables, and has no page numbers or fields. It is omitted when it has no target. Each target heading carries exactly one internal anchor derived from its fixed section key or the stable F-NNN id, never from text; every internal hyperlink resolves to exactly one bookmark (rule 15 still applies). (21) project.ratingMethod.text is plain text under the executiveSummary rules (length, XML 1.0, the shared 25 MiB budget). The ratingMethod report section prints it under its label, with the fixed anchor report_rating_method, only when the section is enabled and the text is not blank; otherwise it emits no heading and no Contents entry. The text is authored: applications fill a default only on explicit request and never regenerate it when the scoring mode or labels change. Lengths in rules 22 and 23 are UTF-16 units, as everywhere in this format; JSON Schema maxLength counts code points, so the stated limits are authoritative. (22) project.customSections holds at most 10 sections {id, title, text, format}. ids are unique, a letter then at most 23 letters, digits or _, generated at random and never derived from the title or position; they never change. Each section has exactly one sections.report row {key \"custom-\"+id, label, enabled} and every custom-<id> row has exactly one section; the row label always equals the title (one value, edited together). title is one trimmed non-blank line of 1-80 UTF-16 units; text and format follow the executiveSummary text rules and the plain/code paragraph rules. sections.report lists the six built-in keys exactly once plus the custom rows (6-16 rows), with contents always printed first whatever its stored position. An enabled section with non-blank text prints its title as a heading and its text, with the anchor report_custom_<id> (at most 38 characters), and is listed in Contents; blank text prints nothing and has no Contents entry. (23) finding.cwe is \"\" or CWE- followed by 1-5 digits, exactly as entered; finding.vulnerabilityType is \"\" or one trimmed line of at most 120 UTF-16 units. Both are the tester's own classification: applications never look them up, infer one from the other or derive them from the rating, status or CVSS. With classificationDisplay.keyFacts, non-empty values are key-fact rows labelled labels.vulnerabilityType and labels.cwe; with classificationDisplay.summaryColumn and the Findings summary enabled, the summary has one column labelled labels.classification showing \"type (CWE-n)\", either value alone, or an en dash when both are empty. They never change the rating or status counts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "createdAt",
+    "savedAt",
+    "project",
+    "findings",
+    "images"
+  ],
+  "properties": {
+    "format": {
+      "const": "fieldnote-project"
+    },
+    "schemaVersion": {
+      "const": 6
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "savedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "paperSize",
+        "nextFindingNumber",
+        "nextImageNumber",
+        "engagementId",
+        "findingPrefix",
+        "cover",
+        "branding",
+        "scoring",
+        "engagement",
+        "sections",
+        "labels",
+        "backToSummaryLinks",
+        "engagementStatus",
+        "findingStatusDisplay",
+        "ratingMethod",
+        "customSections",
+        "classificationDisplay"
+      ],
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/line"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/line"
+        },
+        "client": {
+          "$ref": "#/$defs/line"
+        },
+        "testerName": {
+          "$ref": "#/$defs/line"
+        },
+        "organisation": {
+          "$ref": "#/$defs/line"
+        },
+        "reportVersion": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "classification": {
+          "$ref": "#/$defs/line",
+          "$comment": "Free text, may be empty. Replaces nothing hardcoded: the footer shows it only when non-empty."
+        },
+        "startDate": {
+          "$ref": "#/$defs/dateOrEmpty"
+        },
+        "endDate": {
+          "$ref": "#/$defs/dateOrEmpty"
+        },
+        "reportDate": {
+          "$ref": "#/$defs/dateOrEmpty"
+        },
+        "scope": {
+          "$ref": "#/$defs/text"
+        },
+        "executiveSummary": {
+          "$ref": "#/$defs/text"
+        },
+        "paperSize": {
+          "enum": [
+            "A4",
+            "Letter"
+          ]
+        },
+        "accentColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "nextFindingNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "nextImageNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "engagementId": {
+          "$ref": "#/$defs/line",
+          "$comment": "The one authority for the engagement ID. Shown in the engagement table through a bound row, and used as the default finding prefix."
+        },
+        "findingPrefix": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[^\\r\\n\\t]*$",
+          "$comment": "Override for the visible finding-ID prefix. Empty or whitespace-only means: use engagementId if it is non-empty and at most 40 characters after trimming, else 'F'. Separator '-' and no zero padding in 1b."
+        },
+        "cover": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "branding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "testerLogo",
+            "clientLogo"
+          ],
+          "properties": {
+            "testerLogo": {
+              "$ref": "#/$defs/logoRole"
+            },
+            "clientLogo": {
+              "$ref": "#/$defs/logoRole"
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "severity",
+                "risk",
+                "cvss",
+                "severity+cvss",
+                "risk+cvss"
+              ],
+              "$comment": "'severity' and 'risk' use the same stored finding.rating and differ only in the label (labels.severity / labels.risk). Risk is a user-assigned rating, not a computed business risk. Hidden values stay stored."
+            }
+          }
+        },
+        "engagement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rows"
+          ],
+          "$comment": "Whether the table is exported is controlled only by sections.report[key=engagement].enabled. Row identity is array position; labels need not be unique.",
+          "properties": {
+            "rows": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/$defs/engagementRow"
+              }
+            }
+          }
+        },
+        "sections": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "report",
+            "finding"
+          ],
+          "properties": {
+            "report": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/sectionConfig",
+                "properties": {
+                  "key": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "executiveSummary",
+                          "engagement",
+                          "scope",
+                          "findingsSummary",
+                          "contents",
+                          "ratingMethod"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^custom-[A-Za-z][A-Za-z0-9_]{0,23}$"
+                      }
+                    ]
+                  }
+                }
+              },
+              "$comment": "Report section order. Each built-in key exactly once, plus exactly one custom-<id> row per entry of project.customSections, labelled with that entry's title (rule 22). Stored order is kept as it is (files converted from v3 store contents last); Contents is always printed first, right after the cover or title page (owner R4)."
+            },
+            "finding": {
+              "type": "array",
+              "minItems": 8,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/sectionConfig",
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "assets",
+                      "description",
+                      "details",
+                      "impact",
+                      "threat",
+                      "recommendation",
+                      "evidence",
+                      "references"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "findings",
+            "idColumn",
+            "titleColumn",
+            "severity",
+            "risk",
+            "cvss",
+            "unscored",
+            "figure",
+            "part",
+            "partOf",
+            "page",
+            "pageOf",
+            "backToSummary",
+            "client",
+            "version",
+            "date",
+            "status",
+            "statusNotSet",
+            "cwe",
+            "vulnerabilityType",
+            "classification"
+          ],
+          "$comment": "Visible words outside section headings. Each is a short single line and may not be empty. The Word SEQ field identifier stays the fixed internal name 'Figure'; only the visible word changes.",
+          "properties": {
+            "findings": {
+              "$ref": "#/$defs/label"
+            },
+            "idColumn": {
+              "$ref": "#/$defs/label"
+            },
+            "titleColumn": {
+              "$ref": "#/$defs/label"
+            },
+            "severity": {
+              "$ref": "#/$defs/label"
+            },
+            "risk": {
+              "$ref": "#/$defs/label"
+            },
+            "cvss": {
+              "$ref": "#/$defs/label"
+            },
+            "unscored": {
+              "$ref": "#/$defs/label"
+            },
+            "figure": {
+              "$ref": "#/$defs/label"
+            },
+            "part": {
+              "$ref": "#/$defs/label"
+            },
+            "partOf": {
+              "$ref": "#/$defs/label"
+            },
+            "page": {
+              "$ref": "#/$defs/label"
+            },
+            "pageOf": {
+              "$ref": "#/$defs/label"
+            },
+            "backToSummary": {
+              "$ref": "#/$defs/label"
+            },
+            "client": {
+              "$ref": "#/$defs/label"
+            },
+            "version": {
+              "$ref": "#/$defs/label"
+            },
+            "date": {
+              "$ref": "#/$defs/label"
+            },
+            "status": {
+              "$ref": "#/$defs/label"
+            },
+            "statusNotSet": {
+              "$ref": "#/$defs/label"
+            },
+            "cwe": {
+              "$ref": "#/$defs/label"
+            },
+            "vulnerabilityType": {
+              "$ref": "#/$defs/label"
+            },
+            "classification": {
+              "$ref": "#/$defs/label"
+            }
+          }
+        },
+        "backToSummaryLinks": {
+          "type": "boolean"
+        },
+        "engagementStatus": {
+          "enum": [
+            "draft",
+            "in_review",
+            "delivered",
+            "retest_due",
+            null
+          ],
+          "$comment": "null = Not set (migrated projects). New projects, New from settings and starter projects start as 'draft'. Nothing changes it automatically."
+        },
+        "findingStatusDisplay": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "keyFacts",
+            "summaryColumn",
+            "counts"
+          ],
+          "$comment": "Where finding status is shown in the report. New projects: keyFacts true, the others false. Migrated projects: all false. summaryColumn and counts need the Findings summary section enabled (rule 19).",
+          "properties": {
+            "keyFacts": {
+              "type": "boolean"
+            },
+            "summaryColumn": {
+              "type": "boolean"
+            },
+            "counts": {
+              "type": "boolean"
+            }
+          }
+        },
+        "ratingMethod": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        "customSections": {
+          "type": "array",
+          "maxItems": 10,
+          "$comment": "The user's own report sections, at most 10 (rule 22). Order in the report comes from sections.report, not from this list.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "text",
+              "format"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^\\S([^\\r\\n]*\\S)?$"
+              },
+              "text": {
+                "$ref": "#/$defs/text"
+              },
+              "format": {
+                "$ref": "#/$defs/textFormat"
+              }
+            }
+          }
+        },
+        "classificationDisplay": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "keyFacts",
+            "summaryColumn"
+          ],
+          "$comment": "Where CWE and vulnerability type are shown (rule 23). New and migrated projects: keyFacts true, summaryColumn false. summaryColumn needs the Findings summary section enabled.",
+          "properties": {
+            "keyFacts": {
+              "type": "boolean"
+            },
+            "summaryColumn": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "$comment": "Array order is report order. The visible ID is derived from position (rule 14).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "rating",
+          "cvss",
+          "formats",
+          "evidence",
+          "status",
+          "cwe",
+          "vulnerabilityType"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F-(?!000)[0-9]{3}$"
+          },
+          "title": {
+            "$ref": "#/$defs/line"
+          },
+          "rating": {
+            "enum": [
+              "Critical",
+              "High",
+              "Medium",
+              "Low",
+              "Informational",
+              null
+            ],
+            "$comment": "v1 'severity', renamed. null = unscored."
+          },
+          "cvss": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^CVSS:3\\.1/AV:[NALP]/AC:[LH]/PR:[NLH]/UI:[NR]/S:[UC]/C:[NLH]/I:[NLH]/A:[NLH]$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "affectedAssets": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/$defs/line"
+            }
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          },
+          "details": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/$defs/detailBlock"
+            },
+            "$comment": "v3: ordered text and screenshot blocks (rule 16). v2 details string + formats.details migrate to one text block."
+          },
+          "impact": {
+            "$ref": "#/$defs/text"
+          },
+          "threat": {
+            "$ref": "#/$defs/text"
+          },
+          "recommendation": {
+            "$ref": "#/$defs/text"
+          },
+          "formats": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "impact",
+              "threat",
+              "recommendation"
+            ],
+            "$comment": "plain = blank line is a paragraph, '- ' is a bullet. code = verbatim monospace, every character, tab and leading space kept, no bullet parsing.",
+            "properties": {
+              "description": {
+                "$ref": "#/$defs/textFormat"
+              },
+              "impact": {
+                "$ref": "#/$defs/textFormat"
+              },
+              "threat": {
+                "$ref": "#/$defs/textFormat"
+              },
+              "recommendation": {
+                "$ref": "#/$defs/textFormat"
+              }
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/$defs/imageId"
+            },
+            "uniqueItems": true,
+            "$comment": "Gallery shown in the Evidence section. New v3 projects start with that section disabled."
+          },
+          "status": {
+            "enum": [
+              "open",
+              "fixed",
+              "partly_fixed",
+              "risk_accepted",
+              "false_positive",
+              null
+            ],
+            "$comment": "Author's workflow annotation, not verification. null = Not set (migrated findings). New findings and findings inserted from a library start as 'open'. Never filters findings, scores, counts or figures."
+          },
+          "references": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/$defs/reference"
+            },
+            "$comment": "Optional; absent means no references. Order is report order (rule 18)."
+          },
+          "cwe": {
+            "type": "string",
+            "pattern": "^(CWE-[0-9]{1,5})?$",
+            "$comment": "Empty, or CWE- and 1-5 digits. The tester's entry; never looked up (rule 23)."
+          },
+          "vulnerabilityType": {
+            "type": "string",
+            "maxLength": 120,
+            "pattern": "^([^\\s\\r\\n]([^\\r\\n]*[^\\s\\r\\n])?)?$",
+            "$comment": "Empty, or one trimmed line of at most 120 UTF-16 units (rule 23)."
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "mime",
+          "dataUrl",
+          "width",
+          "height",
+          "bytes",
+          "sha256",
+          "caption",
+          "tallMode"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/imageId"
+          },
+          "mime": {
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ]
+          },
+          "dataUrl": {
+            "type": "string",
+            "pattern": "^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$",
+            "maxLength": 2796300
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16000
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16000
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "caption": {
+            "$ref": "#/$defs/line"
+          },
+          "tallMode": {
+            "enum": [
+              "auto",
+              "fit",
+              "split"
+            ],
+            "$comment": "auto (new default) resolves to split when the image is taller than the usable page height at content width, else fit. Migrated v1 values stay fit/split. Ignored for logo-only images."
+          },
+          "originalName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "line": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "textFormat": {
+      "enum": [
+        "plain",
+        "code"
+      ]
+    },
+    "dateOrEmpty": {
+      "type": "string",
+      "pattern": "^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "imageId": {
+      "type": "string",
+      "pattern": "^IMG-(?!0000)[0-9]{4}$"
+    },
+    "logoRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "imageId",
+        "front",
+        "header",
+        "footer"
+      ],
+      "$comment": "front = the cover page when cover.enabled, else the title block. Logos are always scaled into a bounded box.",
+      "properties": {
+        "imageId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/imageId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "front": {
+          "type": "boolean"
+        },
+        "header": {
+          "type": "boolean"
+        },
+        "footer": {
+          "type": "boolean"
+        }
+      }
+    },
+    "sectionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "enabled"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "engagementRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "label",
+        "enabled"
+      ],
+      "$comment": "Bound rows display an existing project value and have no own value: engagementId, client, testerName, organisation, testingPeriod (startDate to endDate), reportVersion, reportDate, classification, engagementStatus (its display label; null shows labels.statusNotSet). 'custom' rows carry value and format. Exported only when enabled and the displayed value is non-empty.",
+      "properties": {
+        "source": {
+          "enum": [
+            "custom",
+            "engagementId",
+            "client",
+            "testerName",
+            "organisation",
+            "testingPeriod",
+            "reportVersion",
+            "reportDate",
+            "classification",
+            "engagementStatus"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "value": {
+          "$ref": "#/$defs/text"
+        },
+        "format": {
+          "$ref": "#/$defs/textFormat"
+        }
+      },
+      "if": {
+        "properties": {
+          "source": {
+            "const": "custom"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "value",
+          "format"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "value"
+              ]
+            },
+            {
+              "required": [
+                "format"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "blockId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "detailBlock": {
+      "$comment": "One entry of finding.details (v3). Order is report order. Block ids are unique within the finding and survive reordering.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "text",
+            "format"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/blockId"
+            },
+            "type": {
+              "const": "text"
+            },
+            "text": {
+              "$ref": "#/$defs/text"
+            },
+            "format": {
+              "$ref": "#/$defs/textFormat"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "imageId"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/blockId"
+            },
+            "type": {
+              "const": "image"
+            },
+            "imageId": {
+              "$ref": "#/$defs/imageId"
+            }
+          }
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "url"
+      ],
+      "$comment": "One literal reference (rule 18). Exported as text: the title and, when non-empty, the full URL. Never an external hyperlink or relationship.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^\\S(?:[^\\r\\n]*\\S)?$",
+          "$comment": "Single line, non-blank, stored already trimmed."
+        },
+        "url": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s\\u0000-\\u001F\\u007F]+$"
+            }
+          ],
+          "$comment": "Empty (a named reference without an address) or an absolute http(s) URL; the remaining URL rules are in rule 18."
+        }
+      }
+    }
+  }
+}

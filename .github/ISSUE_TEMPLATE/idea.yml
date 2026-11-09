@@ -1,0 +1,65 @@
+name: "Idea"
+description: "Something Rootnote should do, or do differently."
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Everything you post here is public and may be indexed or copied. Deleting a post cannot reliably undo its disclosure.**
+
+        **Never post client or employer material.** No real findings, hostnames, IPs or URLs, no screenshots of real systems, no exported reports or attachments from real work. Reproduce problems with Rootnote's built-in sample report (its client, findings and evidence are fictional; the Unravel Networks branding is real) or with made-up data.
+
+        **Security vulnerability?** Do not post it here. Email security@unravelnetworks.com; see the [security page](https://rootnote.unravelnetworks.com/security/).
+
+        **Rather not post in public?** Email support@unravelnetworks.com. That is not permission to send client or employer files, which we cannot accept by any route.
+
+        Rootnote is maintained by one person alongside a day job: replies are best effort, with no guaranteed response time and no obligation to accept changes. We may remove sensitive or abusive content, but cannot guarantee removal from notifications, caches or copies. Open source is not an audit.
+  - type: textarea
+    id: want
+    attributes:
+      label: "What would you like Rootnote to do?"
+      description: "The change you have in mind."
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: "What are you trying to get done?"
+      description: "The underlying task, not just the feature."
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: "How do you handle it today?"
+      description: "Including doing it by hand in Word."
+    validations:
+      required: false
+  - type: dropdown
+    id: often
+    attributes:
+      label: "How often does this come up?"
+      options:
+        - "Every report"
+        - "Most reports"
+        - "Occasionally"
+        - "Once, but it blocked me"
+    validations:
+      required: false
+  - type: dropdown
+    id: impact
+    attributes:
+      label: "Would the absence of this stop you using Rootnote?"
+      options:
+        - "Yes, it is the reason I stopped"
+        - "It is a real annoyance"
+        - "Nice to have"
+    validations:
+      required: false
+  - type: textarea
+    id: else
+    attributes:
+      label: "Anything else"
+      description: "If another tool does this well, say which and what you liked. No screenshots of real reports."
+    validations:
+      required: false

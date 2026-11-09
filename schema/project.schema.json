@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fieldnote:project:1",
+  "title": "Fieldnote project file, schemaVersion 1 (frozen 2026-11-01, approved by Claude and Codex)",
+  "$comment": "Rules JSON Schema cannot express, enforced by the app validator before any state is replaced: (1) the serialized UTF-8 project file is at most 26214400 bytes (25 MiB), checked on the raw file before parsing; (2) each image's DECODED bytes (base64 payload) are at most 2097152 (2 MiB) and must equal image.bytes; (3) width*height <= 16000000; (4) image.sha256 matches the decoded bytes; (5) the decoded bytes start with the PNG or JPEG signature matching mime, and the real dimensions match width/height; (6) every evidence id and logo id resolves to exactly one image, each image is referenced at most once, ids are unique; (7) a file with schemaVersion greater than 1 is refused as 'newer'; (8) the total number of evidence references across all findings is at most 30, with or without a logo; (9) project.nextFindingNumber is greater than the highest existing F-NNN suffix and project.nextImageNumber is greater than the highest existing IMG-NNNN suffix, and suffixes 000/0000 are never issued or accepted; (10) every string is valid XML 1.0 text: C0 control characters other than tab, LF and CR, U+FFFE/U+FFFF and unpaired surrogates cause the import to be refused (valid Unicode, including astral characters, is preserved unchanged); typed or pasted input is sanitized at entry by removing those characters. Text fields are plain text: blank line = new paragraph, a line starting with '- ' = bullet. Text is never interpreted as HTML.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schemaVersion", "createdAt", "savedAt", "project", "findings", "images"],
+  "properties": {
+    "format": { "const": "fieldnote-project" },
+    "schemaVersion": { "const": 1 },
+    "appVersion": { "type": "string", "maxLength": 32 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "savedAt": { "type": "string", "format": "date-time" },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "paperSize", "nextFindingNumber", "nextImageNumber"],
+      "properties": {
+        "title": { "$ref": "#/$defs/line" },
+        "client": { "$ref": "#/$defs/line" },
+        "testerName": { "$ref": "#/$defs/line" },
+        "organisation": { "$ref": "#/$defs/line" },
+        "reportVersion": { "type": "string", "maxLength": 32 },
+        "classification": { "$ref": "#/$defs/line" },
+        "startDate": { "$ref": "#/$defs/dateOrEmpty" },
+        "endDate": { "$ref": "#/$defs/dateOrEmpty" },
+        "reportDate": { "$ref": "#/$defs/dateOrEmpty" },
+        "scope": { "$ref": "#/$defs/text" },
+        "executiveSummary": { "$ref": "#/$defs/text" },
+        "paperSize": { "enum": ["A4", "Letter"] },
+        "accentColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "logoImageId": { "oneOf": [{ "$ref": "#/$defs/imageId" }, { "type": "null" }] },
+        "nextFindingNumber": { "type": "integer", "minimum": 1, "maximum": 999, "$comment": "Counter for new finding ids. Ids are never reused or renumbered, even after deletion." },
+        "nextImageNumber": { "type": "integer", "minimum": 1, "maximum": 9999 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "$comment": "Array order is report order. Display numbering in the DOCX follows the stable id, not the position.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^F-(?!000)[0-9]{3}$" },
+          "title": { "$ref": "#/$defs/line" },
+          "severity": { "enum": ["Critical", "High", "Medium", "Low", "Informational", null], "$comment": "null = unscored; the pre-export checklist warns." },
+          "affectedAssets": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/line" } },
+          "description": { "$ref": "#/$defs/text" },
+          "reproduction": { "$ref": "#/$defs/text", "$comment": "Request/reproduction text, rendered in the code style." },
+          "impact": { "$ref": "#/$defs/text" },
+          "recommendation": { "$ref": "#/$defs/text" },
+          "evidence": { "type": "array", "maxItems": 30, "items": { "$ref": "#/$defs/imageId" }, "uniqueItems": true }
+        }
+      }
+    },
+    "images": {
+      "type": "array",
+      "maxItems": 31,
+      "$comment": "At most 30 evidence images plus one optional logo. Images not referenced anywhere are refused on import and dropped on save.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "mime", "dataUrl", "width", "height", "bytes", "sha256", "caption", "tallMode"],
+        "properties": {
+          "id": { "$ref": "#/$defs/imageId" },
+          "mime": { "enum": ["image/png", "image/jpeg"] },
+          "dataUrl": { "type": "string", "pattern": "^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$", "maxLength": 2796300 },
+          "width": { "type": "integer", "minimum": 1, "maximum": 16000 },
+          "height": { "type": "integer", "minimum": 1, "maximum": 16000 },
+          "bytes": { "type": "integer", "minimum": 1, "maximum": 2097152, "$comment": "Decoded byte length." },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "caption": { "$ref": "#/$defs/line" },
+          "tallMode": { "enum": ["fit", "split"], "$comment": "How the exporter handles an image taller than one page at full content width. 'fit' scales to the page; 'split' cuts into page-height parts captioned 'part n of m'. Never clipped silently." },
+          "originalName": { "type": "string", "maxLength": 255 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "line": { "type": "string", "maxLength": 300, "pattern": "^[^\\r\\n]*$" },
+    "text": { "type": "string", "maxLength": 20000 },
+    "dateOrEmpty": { "type": "string", "pattern": "^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "imageId": { "type": "string", "pattern": "^IMG-(?!0000)[0-9]{4}$" }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "app": "dist/rootnote.html",
+  "appSha256": "09eab2beeab754216f1f5625ea61daf83580e4de0372a993724f4b88046b228a",
+  "viewport": "1280x1000@2",
+  "theme": "light",
+  "shots": [
+    {
+      "name": "start",
+      "steps": "start screen: heading and the three choices",
+      "size": "900x415",
+      "sha256": "0765fdc399d20dc80139dcfc1d62f73d98f22f8511b35350e680b3672253c10d"
+    },
+    {
+      "name": "start-sample",
+      "steps": "start screen: Explore the sample card, Open the sample marked 1",
+      "size": "303x291",
+      "sha256": "ac62f588f706dd35b3be80f4e94e8c5dd3a0e369a9255906620456c80a86caf7"
+    },
+    {
+      "name": "nav",
+      "steps": "sample open: the section list with Details & cover, the first finding and Preview report marked",
+      "size": "277x657",
+      "sha256": "3337d0b873dcb9a50056c5c471ac3d9a3f1fb6bf6539167845831882a269b0da"
+    },
+    {
+      "name": "title",
+      "steps": "Details & cover: Report title changed to \"(practice)\", field marked 1",
+      "size": "394x91",
+      "sha256": "aa19472cf4ef34ffb816d8f46a36ea7f02efb63f967014910d70c4f833d45ef8"
+    },
+    {
+      "name": "save",
+      "steps": "top bar after a change: Save marked 1",
+      "size": "557x59",
+      "sha256": "d25ae499c94f2f1a99e1016358d1f45804a42add7cea93048ab7b6950048d7a5"
+    },
+    {
+      "name": "open",
+      "steps": "start screen: Open a project card, Open… marked 1",
+      "size": "303x291",
+      "sha256": "aace0f8824da68ea4f92cceb3391a6118e585ab883773fd51607d6be8cf1a94c"
+    },
+    {
+      "name": "preview",
+      "steps": "Preview report: toolbar and the cover page, Go to marked 1, Print / Save as PDF marked 2",
+      "size": "696x82",
+      "sha256": "4dd10aa5bf1ab26b2fae5c2081c602efd6aa9d9928657303d288bdfb9f972d1a"
+    },
+    {
+      "name": "export",
+      "steps": "Check & export: paper size and the Word export button, marked 1",
+      "size": "356x86",
+      "sha256": "c44abada91d64423fc95e1471bc3d91ebf6befea5455a226867b4d1de42e5fb4"
+    },
+    {
+      "name": "new-report",
+      "steps": "start screen: New report card, New report marked 1",
+      "size": "303x291",
+      "sha256": "164bbd4139f24bb881308e706eb6addc260a93fbd836bed8c29e81aab9420ead"
+    },
+    {
+      "name": "facts",
+      "steps": "first finding: tag, key facts and CVSS calculator; Severity marked 1, CVSS calculator marked 2",
+      "size": "589x363",
+      "sha256": "9e8818bd4ba2d4006ea1e41ba55d14a8ba75d929b80bbadaf62b6a901a79fab3"
+    },
+    {
+      "name": "blocks",
+      "steps": "Additional details, pointer between blocks: the insert bar with Screenshot marked 1, and the first text block",
+      "size": "551x150",
+      "sha256": "6c107a91a8c17633366684e85d2f29341a5d9c7418fc09fa7d7807285b2e4494"
+    },
+    {
+      "name": "library",
+      "steps": "Finding library: tabs and buttons; OWASP starter marked 1, Open library marked 2",
+      "size": "865x188",
+      "sha256": "e430d821e8ff58f4bd5f53186db0b9d618a3dd3394c55950afee3782e842700a"
+    },
+    {
+      "name": "screenshot-card",
+      "steps": "a screenshot in Additional details; Caption marked 1, Black out or crop marked 2",
+      "size": "586x208",
+      "sha256": "3cd9445e58abad04d58e6791c2d0d07933f598ebf2e765474f360d2559036a4b"
+    },
+    {
+      "name": "redact",
+      "steps": "screenshot editor: the tool buttons and the top of the picture; Black out marked 1",
+      "size": "369x248",
+      "sha256": "c17a71020e6c4c87845b71b075cad27f531129e08c622f0b846b765edfcd78b4"
+    },
+    {
+      "name": "logos",
+      "steps": "Details & cover, Page, cover and logos opened; Your logo marked 1, Client logo marked 2",
+      "size": "758x240",
+      "sha256": "8d84480cf701e7fe2f7ba96246e823a690426068489109cac88191f477198e9d"
+    },
+    {
+      "name": "sections",
+      "steps": "Sections & scoring: Scoring choice marked 1 and the report section list",
+      "size": "394x145",
+      "sha256": "b22a8175bade94997c4f69ef0bc12129700828fdafc0f03986691bc871c598c6"
+    },
+    {
+      "name": "section-list",
+      "steps": "Sections & scoring: report sections in order; a Show box marked 1, the move arrows marked 2",
+      "size": "746x407",
+      "sha256": "ea650968898bc51202a8527439c5bf5ff1687bb80107530d93bc5660c100e292"
+    },
+    {
+      "name": "recovery",
+      "steps": "Check & export: Keep a recovery draft switch marked 1",
+      "size": "798x105",
+      "sha256": "9469f434bc0563d7817ce2b0271d656c3c77e45f66798bae3e1328ab9fbcaeb6"
+    },
+    {
+      "name": "checks",
+      "steps": "Check & export: the list of things to look at; first Fix button marked 1",
+      "size": "840x308",
+      "sha256": "db35f344b596eb4ee47bfcbbac7aade4d4869697db403e7ea6caf2db063ecca8"
+    }
+  ],
+  "browser": "Chrome/156.0.8078.74"
+}

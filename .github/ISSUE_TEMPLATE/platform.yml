@@ -1,0 +1,94 @@
+name: "Platform report"
+description: "You tried Rootnote, or its report, somewhere we have not tested."
+labels: ["platform"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Everything you post here is public and may be indexed or copied. Deleting a post cannot reliably undo its disclosure.**
+
+        **Never post client or employer material.** No real findings, hostnames, IPs or URLs, no screenshots of real systems, no exported reports or attachments from real work. Reproduce problems with Rootnote's built-in sample report (its client, findings and evidence are fictional; the Unravel Networks branding is real) or with made-up data.
+
+        **Security vulnerability?** Do not post it here. Email security@unravelnetworks.com; see the [security page](https://rootnote.unravelnetworks.com/security/).
+
+        **Rather not post in public?** Email support@unravelnetworks.com. That is not permission to send client or employer files, which we cannot accept by any route.
+
+        Rootnote is maintained by one person alongside a day job: replies are best effort, with no guaranteed response time and no obligation to accept changes. We may remove sensitive or abusive content, but cannot guarantee removal from notifications, caches or copies. Open source is not an audit.
+  - type: dropdown
+    id: check
+    attributes:
+      label: "Which check is this?"
+      description: "The checks are described at https://rootnote.unravelnetworks.com/help-us-check/"
+      options:
+        - "Word for Mac"
+        - "LibreOffice Writer"
+        - "Printing to PDF from Safari on macOS"
+        - "Linux desktop browser"
+        - "Exploring on an Android phone"
+        - "Something else"
+    validations:
+      required: true
+  - type: textarea
+    id: did
+    attributes:
+      label: "What did you do?"
+      description: "The steps you took, with the built-in sample or made-up data."
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: "What happened?"
+      options:
+        - "Worked as the guide describes"
+        - "Worked, with something minor wrong"
+        - "Something significant was wrong"
+        - "Did not work at all"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: "Details"
+      description: "For the Word file: opened without a repair prompt? Headings and summary links work? Screenshots present and upright? Captions in figure order, split parts sharing one number? Page numbers and totals right? Any change after save, close and reopen? For printing: blank pages, anything cut off, whole report present?"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "Operating system and version"
+      description: "For example macOS 15.1."
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: "Browser and version"
+      description: "For example Safari 18.1."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "Rootnote version"
+      description: "Shown under About & licences."
+    validations:
+      required: true
+  - type: input
+    id: consumer
+    attributes:
+      label: "Program you opened the report in, and its version"
+      description: "If the check involved the Word file or a PDF."
+    validations:
+      required: false
+  - type: dropdown
+    id: quote
+    attributes:
+      label: "May we quote this public report elsewhere?"
+      description: "This issue stays public whatever you choose. For a private reply, email support@unravelnetworks.com. Results qualify only the setup reported; we never present them as certification."
+      options:
+        - "Yes, with my GitHub username"
+        - "Yes, without attribution"
+        - "No additional quotation or attribution"
+    validations:
+      required: false

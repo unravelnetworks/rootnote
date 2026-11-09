@@ -1,0 +1,221 @@
+{
+  "format": "fieldnote-project",
+  "schemaVersion": 6,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "savedAt": "2026-01-01T00:00:00.000Z",
+  "project": {
+    "title": "API penetration test",
+    "client": "[[Customer]]",
+    "testerName": "",
+    "organisation": "",
+    "reportVersion": "1.0",
+    "classification": "",
+    "startDate": "",
+    "endDate": "",
+    "reportDate": "",
+    "scope": "In scope:\n- [[API base URL(s) and version]]\n- [[authentication methods and client roles tested]]\n\nOut of scope:\n- [[endpoints, environments or test types excluded]]",
+    "executiveSummary": "[[Customer]] asked [[organisation]] to assess the security of [[API name]] between [[start date]] and [[end date]].\n\n[[Overall result in two or three sentences: the most important risks and what they allow an attacker to do.]]\n\n[[Main recommendations, in priority order.]]",
+    "paperSize": "A4",
+    "accentColor": "#1f5f8b",
+    "subtitle": "",
+    "nextFindingNumber": 1,
+    "nextImageNumber": 1,
+    "engagementId": "",
+    "findingPrefix": "",
+    "cover": {
+      "enabled": true
+    },
+    "scoring": {
+      "mode": "severity"
+    },
+    "engagement": {
+      "rows": [
+        {
+          "source": "engagementId",
+          "label": "Engagement ID",
+          "enabled": true
+        },
+        {
+          "source": "testerName",
+          "label": "Researcher(s)",
+          "enabled": true
+        },
+        {
+          "source": "client",
+          "label": "Customer",
+          "enabled": true
+        },
+        {
+          "source": "custom",
+          "label": "Customer contact",
+          "enabled": true,
+          "value": "[[name, role]]",
+          "format": "plain"
+        },
+        {
+          "source": "testingPeriod",
+          "label": "Testing period",
+          "enabled": true
+        },
+        {
+          "source": "custom",
+          "label": "Scope summary",
+          "enabled": true,
+          "value": "[[one line, for example the public REST API v2]]",
+          "format": "plain"
+        },
+        {
+          "source": "custom",
+          "label": "Analysed data",
+          "enabled": true,
+          "value": "[[API specification, test accounts and tokens, documentation provided]]",
+          "format": "plain"
+        },
+        {
+          "source": "custom",
+          "label": "Methodology",
+          "enabled": true,
+          "value": "Manual testing against the OWASP API Security Top 10 2023 and the OWASP Web Security Testing Guide 4.2, supported by [[tools used]].",
+          "format": "plain"
+        },
+        {
+          "source": "custom",
+          "label": "Limitations",
+          "enabled": true,
+          "value": "[[time, environment or access limits that affected coverage; \"None\" if none]]",
+          "format": "plain"
+        }
+      ]
+    },
+    "sections": {
+      "report": [
+        {
+          "key": "contents",
+          "label": "Contents",
+          "enabled": false
+        },
+        {
+          "key": "executiveSummary",
+          "label": "Executive summary",
+          "enabled": true
+        },
+        {
+          "key": "engagement",
+          "label": "Engagement details",
+          "enabled": true
+        },
+        {
+          "key": "scope",
+          "label": "Scope",
+          "enabled": true
+        },
+        {
+          "key": "ratingMethod",
+          "label": "How findings are rated",
+          "enabled": false
+        },
+        {
+          "key": "findingsSummary",
+          "label": "Findings summary",
+          "enabled": true
+        }
+      ],
+      "finding": [
+        {
+          "key": "assets",
+          "label": "Affected assets",
+          "enabled": true
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "enabled": true
+        },
+        {
+          "key": "details",
+          "label": "Additional details",
+          "enabled": true
+        },
+        {
+          "key": "impact",
+          "label": "Impact",
+          "enabled": true
+        },
+        {
+          "key": "threat",
+          "label": "Threat",
+          "enabled": true
+        },
+        {
+          "key": "recommendation",
+          "label": "Recommendations",
+          "enabled": true
+        },
+        {
+          "key": "evidence",
+          "label": "Evidence",
+          "enabled": false
+        },
+        {
+          "key": "references",
+          "label": "References",
+          "enabled": true
+        }
+      ]
+    },
+    "labels": {
+      "findings": "Findings",
+      "idColumn": "ID",
+      "titleColumn": "Finding",
+      "severity": "Severity",
+      "risk": "Risk",
+      "cvss": "CVSS 3.1 Base",
+      "unscored": "Unscored",
+      "figure": "Figure",
+      "part": "part",
+      "partOf": "of",
+      "page": "Page",
+      "pageOf": "of",
+      "backToSummary": "Back to findings summary",
+      "client": "Client",
+      "version": "Version",
+      "date": "Date",
+      "status": "Status",
+      "statusNotSet": "Not set",
+      "cwe": "CWE",
+      "vulnerabilityType": "Vulnerability type",
+      "classification": "Classification"
+    },
+    "backToSummaryLinks": false,
+    "branding": {
+      "testerLogo": {
+        "imageId": null,
+        "front": true,
+        "header": false,
+        "footer": false
+      },
+      "clientLogo": {
+        "imageId": null,
+        "front": true,
+        "header": false,
+        "footer": false
+      }
+    },
+    "engagementStatus": "draft",
+    "findingStatusDisplay": {
+      "keyFacts": true,
+      "summaryColumn": false,
+      "counts": false
+    },
+    "ratingMethod": {
+      "text": ""
+    },
+    "customSections": [],
+    "classificationDisplay": {
+      "keyFacts": true,
+      "summaryColumn": false
+    }
+  },
+  "findings": [],
+  "images": []
+}

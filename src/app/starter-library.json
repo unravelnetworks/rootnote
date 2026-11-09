@@ -1,0 +1,586 @@
+{
+  "format": "fieldnote-library",
+  "libraryVersion": 2,
+  "entries": [
+    {
+      "id": "L-85bb4151a0fd20e1374bb1101cb52d7e",
+      "name": "01 - Object-level authorization bypass (IDOR/BOLA)",
+      "title": "Object-level authorization bypass (IDOR/BOLA)",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "An object identifier selects a record; it does not establish permission to use it. In [[operation and endpoint]], the account [[tested account and role]] could [[observed read or change]] an object belonging to [[other test account or tenant]], contrary to [[expected ownership or sharing rule]]. [[confirm the unauthorized result from returned data or persisted state rather than a success status alone, then replace this prompt with that evidence]]",
+      "impact": "The confirmed exposure or change was [[specific data or state affected]]. The demonstrated boundary crossed was [[account or tenant boundary]]. The tested scope was [[objects and operations verified]]; access to other records or operations was [[not assessed or separately confirmed scope]].",
+      "threat": "An attacker with [[required account access and object identifier knowledge]] could attempt the same operation against objects outside their permission set. Wider enumeration or cross-tenant compromise depends on additional reachable objects and permissions; it is not established by one successful test.",
+      "recommendation": "Enforce server-side authorization for the authenticated caller, requested object and operation on every access path. Apply tenant and ownership restrictions in the data-access layer, including bulk operations. Unpredictable identifiers may reduce guessing but do not replace these checks. Verify that owner and authorized-sharing cases succeed while unrelated accounts and tenants cannot read or modify the same object.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Permitted owner operation: [[redacted request and response]].\n2. Second test identity and expected permissions: [[identity and policy]].\n3. Same operation against the owner object as the second identity: [[redacted request]].\n4. Actual returned data or verified state change: [[observed result]].\n5. Comparison with an authorized control and scope limits: [[control and limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API1",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHZ-04",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References/"
+        },
+        {
+          "title": "CWE-639",
+          "url": "https://cwe.mitre.org/data/definitions/639.html"
+        }
+      ]
+    },
+    {
+      "id": "L-c34f8fd0eb3706947f3b65ef2d99314c",
+      "name": "02 - Restricted function accessible to an unauthorized role",
+      "title": "Restricted function accessible to an unauthorized role",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "A server-side operation must enforce the caller's role even when its interface is hidden. The [[tested lower-privilege role]] account invoked [[restricted operation and endpoint]], which should be limited to [[authorized role or policy]]. The server performed [[verified operation]] despite that restriction. This establishes an authorization failure for the tested function; it does not establish whether a check is absent or incorrectly implemented in source code.",
+      "impact": "The confirmed unauthorized action was [[specific action and resulting state]]. It affected [[tested resources or workflow]]. Additional privileged operations were [[not assessed or separately confirmed scope]].",
+      "threat": "An attacker who can authenticate as [[required role]] and reach the operation could attempt [[demonstrated privileged action]]. The necessary account access and reachable functions determine the practical exposure.",
+      "recommendation": "Authorize each operation on the server using a deny-by-default policy for roles and permissions. Apply the same policy to alternate methods, routes and API versions. Keep privileged functions separate from general update handlers. Verify that an allowed role can perform the action and that lower roles, anonymous callers and equivalent alternate routes are denied without changing state.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Intended role restriction: [[policy or owner confirmation]].\n2. Authorized control: [[redacted authorized operation]].\n3. Lower-role request to the same function: [[redacted request]].\n4. Resulting state or other independent proof: [[observed effect]].\n5. Cleanup and tested alternate routes: [[cleanup and scope]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API5",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa5-broken-function-level-authorization/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHZ-03",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/03-Testing_for_Privilege_Escalation/"
+        },
+        {
+          "title": "CWE-862",
+          "url": "https://cwe.mitre.org/data/definitions/862.html"
+        }
+      ]
+    },
+    {
+      "id": "L-fffaeaf966f9ecd814987b8207ff87ae",
+      "name": "03 - Unauthorized modification of protected object properties",
+      "title": "Unauthorized modification of protected object properties",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Update input must be restricted to properties the caller is allowed to change. In [[update operation]], the [[tested role]] submitted [[protected property]], and the server persisted [[verified unauthorized value or effect]]. The property should be controlled by [[expected authority or rule]]. This finding concerns writable properties; the input-binding implementation was [[confirmed binding mechanism or not assessed]].",
+      "impact": "The confirmed result was [[changed protected state and consequence]]. Only [[properties and object types tested]] were assessed. Privilege escalation, ownership changes or other effects should be included only where separately demonstrated.",
+      "threat": "An attacker with [[required update access]] could submit additional or modified properties to seek changes outside the intended editable field set. Exploitability depends on which fields the server accepts and how later operations use them.",
+      "recommendation": "Use dedicated request models with an explicit allowlist of editable properties for the caller and operation. Set ownership, roles and other protected values server-side. Check authorization for each sensitive field as well as the object. Reject or safely ignore unexpected properties. Verify persisted state after attempts to set protected, nested and newly introduced fields.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Normal allowed update and protected-field rule: [[baseline and rule]].\n2. Test identity, object and input property: [[redacted request]].\n3. Independent read-back or protected operation: [[persisted result]].\n4. Binding implementation, if reviewed: [[mechanism or not assessed]].\n5. Cleanup and limits: [[restored state and tested fields]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API3",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa3-broken-object-property-level-authorization/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHZ-03",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/03-Testing_for_Privilege_Escalation/"
+        },
+        {
+          "title": "CWE-915",
+          "url": "https://cwe.mitre.org/data/definitions/915.html"
+        },
+        {
+          "title": "OWASP Mass Assignment Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
+        }
+      ]
+    },
+    {
+      "id": "L-9c954d44e456790ca1b0671a031d7ea3",
+      "name": "04 - SQL injection in a database-backed operation",
+      "title": "SQL injection in a database-backed operation",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Untrusted input can alter SQL structure when it is not separated from the query. At [[endpoint and parameter]], controlled testing produced [[repeatable query-related behavior]], consistent with SQL injection in [[tested operation]]. [[record corroborating evidence and controls establishing query influence rather than a database-looking error alone]] The database engine and query context were [[confirmed context or not established]].",
+      "impact": "The demonstrated effect was [[specific data exposure or query manipulation]]. The database account's wider permissions and access to other data were [[assessed scope or not assessed]]. Do not infer operating-system execution or a complete database compromise from the tested result.",
+      "threat": "An attacker able to supply [[affected input and authentication prerequisite]] could influence the database operation. Further consequences depend on the query context, database privileges and reachable data.",
+      "recommendation": "Use parameterized queries for data values and avoid constructing SQL by concatenation. Where identifiers or sort directions cannot be bound, select them from fixed server-side allowlists. Apply least privilege to the database account and return non-sensitive errors. Verify that controlled inputs remain data and that the original business operation still works.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Baseline operation and authorization: [[redacted baseline]].\n2. Controlled test and matching negative control: [[redacted inputs and controls]].\n3. Repeated result and corroboration: [[observed behavior and evidence]].\n4. Alternative causes excluded: [[validation, caching or timing controls]].\n5. Confirmed data and query scope: [[tested limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A05",
+          "url": "https://top10.owasp.org/2025/A05_2025-Injection/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-INPV-05",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection/"
+        },
+        {
+          "title": "CWE-89",
+          "url": "https://cwe.mitre.org/data/definitions/89.html"
+        }
+      ]
+    },
+    {
+      "id": "L-b281a2edfacc87c170356fa3d348bfdd",
+      "name": "05 - Stored cross-site scripting in rendered content",
+      "title": "Stored cross-site scripting in rendered content",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Stored user content must be rendered without becoming executable script. Content submitted through [[input and storage location]] was later rendered at [[affected view]] and executed in [[test browser and origin]]. The observed execution was [[benign confirmation]]. [[record actual browser execution evidence rather than stored markup or an unescaped response alone]]",
+      "impact": "The demonstrated execution occurred for [[tested viewer role and workflow]]. The confirmed accessible data or action was [[verified effect or not assessed beyond benign execution]]. Exposure to other users depends on who can view the stored content and on browser protections.",
+      "threat": "An attacker with [[content submission permission]] could place executable content where [[victim role]] later views it. The script operates within the affected origin, subject to its actual browser and application restrictions.",
+      "recommendation": "Apply output encoding for the precise HTML, attribute, URL or script context. When rich HTML is required, sanitize it using a maintained allowlist-based sanitizer. Avoid unsafe rendering sinks and use a restrictive CSP as an additional defense. Verify every affected rendering context with stored content and a permitted viewer account.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Input location and submitting identity: [[redacted submission]].\n2. Stored-content retrieval and viewer workflow: [[affected view]].\n3. Benign execution proof and origin: [[browser evidence]].\n4. Viewer account and protections observed: [[role and browser controls]].\n5. Removal of test content and scope: [[cleanup and limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A05",
+          "url": "https://top10.owasp.org/2025/A05_2025-Injection/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-INPV-02",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/07-Input_Validation_Testing/02-Testing_for_Stored_Cross_Site_Scripting/"
+        },
+        {
+          "title": "CWE-79",
+          "url": "https://cwe.mitre.org/data/definitions/79.html"
+        }
+      ]
+    },
+    {
+      "id": "L-256233ca75bcd5c929c32c57a2098368",
+      "name": "06 - Cross-site request forgery on a state-changing operation",
+      "title": "Cross-site request forgery on a state-changing operation",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "A browser can attach ambient credentials to some cross-site requests. The operation [[state-changing endpoint]] accepted a request initiated from [[controlled different origin]] while the test user was authenticated, and changed [[verified state]] without the intended user approval. [[record the browser state change and relevant cookie behavior rather than inferring CSRF from a missing token alone]]",
+      "impact": "The confirmed unwanted action was [[state change on the test account]]. Further actions or account compromise were [[tested scope or not assessed]].",
+      "threat": "An attacker would need [[victim interaction and authentication prerequisites]] to cause the browser to submit the affected operation. Cookie SameSite rules, origin checks and any additional user confirmation affect whether that path is viable.",
+      "recommendation": "Protect state-changing requests with framework-supported anti-CSRF controls, such as session-bound tokens and appropriate Origin checks. Set suitable SameSite cookie attributes as defense in depth and keep state changes out of GET requests. Verify that the realistic cross-site browser request is refused while the same permitted in-app action succeeds.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Authorized in-app action and initial state: [[baseline]].\n2. Controlled attacker origin and victim browser context: [[origins and credential behavior]].\n3. Cross-site browser request: [[redacted reproduction]].\n4. Independent confirmation of the resulting state: [[observed change]].\n5. Existing protections and cleanup: [[controls and restored state]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-SESS-05",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/06-Session_Management_Testing/05-Testing_for_Cross_Site_Request_Forgery/"
+        },
+        {
+          "title": "CWE-352",
+          "url": "https://cwe.mitre.org/data/definitions/352.html"
+        }
+      ]
+    },
+    {
+      "id": "L-ed13df05fca48797abdb834a7e6d101b",
+      "name": "07 - Server-side request forgery through a user-controlled destination",
+      "title": "Server-side request forgery through a user-controlled destination",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "A server-side fetch must restrict destinations according to its intended purpose. The input [[destination input and endpoint]] caused the server-side component [[identified component or not established]] to contact [[approved controlled destination]]. The request was correlated through [[unique test marker and callback evidence]]. The demonstrated reach was [[confirmed destination scope]].",
+      "impact": "The confirmed effect was [[server-side request or returned data]]. Reachability of internal services, metadata endpoints and other protocols was [[explicitly tested scope or not assessed]]. An external callback alone does not establish access to an internal network.",
+      "threat": "An attacker with [[required feature access]] could influence a request made by the server. Additional consequences depend on destination restrictions, response exposure, authentication and network egress permissions.",
+      "recommendation": "Restrict destination schemes, hosts and ports to the feature's approved set. Validate resolved addresses and redirects, accounting for address changes between validation and connection. Apply network egress controls and avoid forwarding credentials to untrusted destinations. Verify allowed fetches and refusal of unauthorized destinations using approved controlled targets.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Intended fetch behavior and permitted destination policy: [[baseline and rule]].\n2. Approved controlled destination and unique marker: [[test destination]].\n3. Submitted request and correlated server-side callback: [[redacted evidence]].\n4. Response visibility and component attribution: [[observed result]].\n5. Authorized testing boundary: [[destinations not assessed]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API7",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa7-server-side-request-forgery/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-INPV-19",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/07-Input_Validation_Testing/19-Testing_for_Server-Side_Request_Forgery/"
+        },
+        {
+          "title": "CWE-918",
+          "url": "https://cwe.mitre.org/data/definitions/918.html"
+        }
+      ]
+    },
+    {
+      "id": "L-704892de89a210dfba2ee577aa4dd059",
+      "name": "08 - Path traversal outside the permitted file location",
+      "title": "Path traversal outside the permitted file location",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "File operations must remain within their approved directory and authorization boundary. In [[file operation and endpoint]], the path input [[affected input]] selected [[approved test file outside the allowed root]], producing [[verified read or write effect]]. The expected permitted root was [[intended root or policy]].",
+      "impact": "The demonstrated effect was [[specific file disclosure or modification]] within [[tested scope]]. Access to secrets, executable files or other locations was [[separately verified or not assessed]]. File access does not by itself establish code execution.",
+      "threat": "An attacker with [[required operation access]] could attempt to select a file outside the intended root. The file-system permissions of the process and the operation type limit the possible effect.",
+      "recommendation": "Prefer server-side file identifiers over user-supplied paths. If paths are necessary, resolve them against a fixed permitted root and verify containment using path-aware checks rather than string prefixes. Handle platform separators and symbolic links consistently, and apply object authorization and least-privilege file permissions. Verify with controlled files inside and outside the approved root.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Intended file root and normal permitted operation: [[baseline and policy]].\n2. Approved benign marker file outside that root: [[test file and authorization]].\n3. Submitted path and actual returned marker or write: [[redacted request and result]].\n4. Resolution or link behavior if reviewed: [[mechanism or not assessed]].\n5. Cleanup and untested file locations: [[limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A01",
+          "url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHZ-01",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/01-Testing_Directory_Traversal_File_Include/"
+        },
+        {
+          "title": "CWE-22",
+          "url": "https://cwe.mitre.org/data/definitions/22.html"
+        }
+      ]
+    },
+    {
+      "id": "L-fc2197ded8758db2133109cb2eb821e2",
+      "name": "09 - Password-reset token reusable after a successful reset",
+      "title": "Password-reset token reusable after a successful reset",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "A password-reset token should authorize one reset and then become unusable. For [[test account and reset endpoint]], the token used for a completed reset was accepted again and performed [[second confirmed reset]]. [[confirm actual authentication state after both resets rather than reset-form availability alone, then record the evidence]]",
+      "impact": "The confirmed effect was [[repeated reset of the controlled account]]. The token remained usable for [[observed interval or not measured]]. Token theft, discovery and compromise of other accounts were [[separately verified or not assessed]].",
+      "threat": "An attacker who obtains a still-usable reset token could attempt another reset after its legitimate use. This requires access to that token; the reuse defect does not establish that tokens can be guessed or obtained remotely.",
+      "recommendation": "Bind reset tokens to the intended account and action, give them a short appropriate lifetime, and consume them atomically when the password change succeeds. Protect token storage and delivery. Verify that the used token, concurrent replays and expired tokens cannot perform another reset, while a fresh authorized token works.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Controlled account and first reset flow: [[redacted baseline]].\n2. First successful password change and login confirmation: [[observed result]].\n3. Reuse of the same token for a second change: [[redacted reproduction]].\n4. Independent authentication check after reuse: [[confirmed state]].\n5. Account restoration and token exposure limits: [[cleanup and limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A07",
+          "url": "https://top10.owasp.org/2025/A07_2025-Authentication_Failures/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API2",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa2-broken-authentication/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHN-09",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/04-Authentication_Testing/09-Testing_for_Weak_Password_Change_or_Reset_Functionalities/"
+        },
+        {
+          "title": "CWE-640",
+          "url": "https://cwe.mitre.org/data/definitions/640.html"
+        },
+        {
+          "title": "OWASP Forgot Password Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html"
+        }
+      ]
+    },
+    {
+      "id": "L-feb780b213f35294ff2ad6c7ffe455b9",
+      "name": "10 - Attacker-known session remains usable after authentication",
+      "title": "Attacker-known session remains usable after authentication",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Authentication should not promote an attacker-controlled anonymous session into a trusted authenticated session. In [[login workflow]], the identifier [[redacted identifier reference]] was known or set through [[demonstrated fixation mechanism]] before login. After the test user authenticated, an independent browser using that identifier obtained [[confirmed authenticated context]].",
+      "impact": "The confirmed access was [[test account context and verified operation]]. Access after logout, token expiry or other authentication paths was [[tested scope or not assessed]].",
+      "threat": "An attacker would need to make the victim use an identifier the attacker knows, then reuse it after the victim logs in. The ability to fix or obtain that pre-authentication identifier is a required part of the attack path.",
+      "recommendation": "Generate a fresh authenticated session identifier at login and privilege changes, invalidate the previous identifier, and reject externally supplied identifiers where inappropriate. Protect session cookies with suitable attributes. Verify that an independent client using the old identifier remains unauthenticated after login and that the new session works normally.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Pre-login identifier and how a second party can know or fix it: [[mechanism]].\n2. Test victim authentication: [[redacted workflow]].\n3. Independent client reuse of the old identifier: [[request]].\n4. Authenticated response or operation proving access: [[observed result]].\n5. Session cleanup and tested expiry/logout behavior: [[limits]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A07",
+          "url": "https://top10.owasp.org/2025/A07_2025-Authentication_Failures/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API2",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa2-broken-authentication/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-SESS-03",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/06-Session_Management_Testing/03-Testing_for_Session_Fixation/"
+        },
+        {
+          "title": "CWE-384",
+          "url": "https://cwe.mitre.org/data/definitions/384.html"
+        }
+      ]
+    },
+    {
+      "id": "L-5e703560bd8b8b4738dc955a769e5f4c",
+      "name": "11 - Insufficient restriction of repeated authentication attempts",
+      "title": "Insufficient restriction of repeated authentication attempts",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Authentication controls should constrain repeated failed attempts in a way appropriate to the service's risk. During the agreed test of [[login operation]], [[attempt count and interval]] failed attempts against [[controlled account or accounts]] were permitted with [[observed response and delay behavior]]. This exceeded [[documented policy or owner-agreed test threshold]]. The observation is limited to the tested account, source and time window.",
+      "impact": "The confirmed weakness was [[specific ineffective or absent attempt restriction]]. Successful password guessing or account takeover was [[separately demonstrated or not assessed]]. A lack of visible challenges does not establish that every monitoring or risk control is absent.",
+      "threat": "An attacker could attempt password guessing under [[required network and account conditions]]. Practical success depends on credential strength, multifactor authentication, controls outside the tested window and detection or response.",
+      "recommendation": "Apply risk-appropriate per-account and source-aware throttling, progressive delays, and monitoring of repeated failures. Use multifactor authentication where appropriate. Avoid a hard lockout design that lets third parties easily deny access to arbitrary users. Verify the agreed attempt limits and recovery behavior using controlled accounts without disrupting other users.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Agreed low-volume test ceiling and policy: [[authorization and threshold]].\n2. Controlled accounts, source and test interval: [[context]].\n3. Attempt count, timing and response observations: [[redacted results]].\n4. Other protections checked or not visible: [[MFA, challenges, monitoring and limits]].\n5. Account availability and cleanup: [[final state]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A07",
+          "url": "https://top10.owasp.org/2025/A07_2025-Authentication_Failures/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API2",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa2-broken-authentication/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-ATHN-03",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/04-Authentication_Testing/03-Testing_for_Weak_Lock_Out_Mechanism/"
+        },
+        {
+          "title": "CWE-307",
+          "url": "https://cwe.mitre.org/data/definitions/307.html"
+        }
+      ]
+    },
+    {
+      "id": "L-307b350e9be92da7090db94a5e6afb57",
+      "name": "12 - Untrusted origin can read sensitive authenticated responses through CORS",
+      "title": "Untrusted origin can read sensitive authenticated responses through CORS",
+      "rating": null,
+      "cvss": null,
+      "affectedAssets": [
+        "[[affected endpoint or asset]]"
+      ],
+      "description": "Cross-origin response access should be limited to origins trusted for the returned data. A page at [[controlled untrusted origin]] used the test browser's actual authentication context to request [[affected endpoint]] and read [[specific sensitive response]]. The origin was outside [[intended trust policy]]. [[record actual browser-readable sensitive data rather than relying on permissive response headers alone]]",
+      "impact": "The confirmed data readable cross-origin was [[specific data and test account scope]]. Other endpoints and users were [[tested scope or not assessed]]. This finding establishes a read path, not every possible state-changing action.",
+      "threat": "An attacker would need [[victim visit and authentication prerequisites]] and a browser that sends the required credentials in this context. Cookie policy and any separate tokens affect viability; bearer credentials unavailable to the attacker are not automatically attached by the browser.",
+      "recommendation": "Use an explicit allowlist of trusted origins appropriate to each endpoint and avoid reflecting arbitrary Origin values. Enable credentialed cross-origin access only where required, and return Vary: Origin when responses vary by origin. Verify in a real browser that unauthorized origins cannot read sensitive responses while approved integrations continue to work.",
+      "formats": {
+        "description": "plain",
+        "impact": "plain",
+        "threat": "plain",
+        "recommendation": "plain"
+      },
+      "details": [
+        {
+          "type": "text",
+          "format": "plain",
+          "text": "Steps and evidence:\n1. Intended trusted origins and sensitive endpoint: [[policy and baseline]].\n2. Controlled untrusted origin and real browser credential behavior: [[context]].\n3. Relevant request/response headers with secrets removed: [[redacted headers]].\n4. JavaScript-readable sensitive result in that origin: [[observed read]].\n5. Approved-origin control and tested limitations: [[control and scope]]."
+        }
+      ],
+      "references": [
+        {
+          "title": "[[keep only the references that match the tested case, then delete this row]]",
+          "url": ""
+        },
+        {
+          "title": "OWASP Top 10:2025 A02",
+          "url": "https://top10.owasp.org/2025/A02_2025-Security_Misconfiguration/"
+        },
+        {
+          "title": "OWASP API Security Top 10:2023 API8",
+          "url": "https://api-security.owasp.org/editions/2023/en/0xa8-security-misconfiguration/"
+        },
+        {
+          "title": "OWASP WSTG v4.2 WSTG-CLNT-07",
+          "url": "https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/11-Client-side_Testing/07-Testing_Cross_Origin_Resource_Sharing/"
+        },
+        {
+          "title": "CWE-942",
+          "url": "https://cwe.mitre.org/data/definitions/942.html"
+        }
+      ]
+    }
+  ]
+}

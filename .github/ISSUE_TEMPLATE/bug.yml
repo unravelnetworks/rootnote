@@ -1,0 +1,100 @@
+name: "Something is broken"
+description: "Rootnote did something wrong, or not what the guide says."
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Everything you post here is public and may be indexed or copied. Deleting a post cannot reliably undo its disclosure.**
+
+        **Never post client or employer material.** No real findings, hostnames, IPs or URLs, no screenshots of real systems, no exported reports or attachments from real work. Reproduce problems with Rootnote's built-in sample report (its client, findings and evidence are fictional; the Unravel Networks branding is real) or with made-up data.
+
+        **Security vulnerability?** Do not post it here. Email security@unravelnetworks.com; see the [security page](https://rootnote.unravelnetworks.com/security/).
+
+        **Rather not post in public?** Email support@unravelnetworks.com. That is not permission to send client or employer files, which we cannot accept by any route.
+
+        Rootnote is maintained by one person alongside a day job: replies are best effort, with no guaranteed response time and no obligation to accept changes. We may remove sensitive or abusive content, but cannot guarantee removal from notifications, caches or copies. Open source is not an audit.
+  - type: textarea
+    id: doing
+    attributes:
+      label: "What were you trying to do?"
+      description: "One or two lines."
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: "What happened?"
+      description: "What you saw. Reproduce errors with synthetic data first and remove names, local paths, usernames, tokens and hostnames. Never upload a real engagement file or screenshot."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "What did you expect to happen?"
+      description: "What the guide says, or what you expected."
+    validations:
+      required: true
+  - type: dropdown
+    id: repeat
+    attributes:
+      label: "Can you make it happen again?"
+      options:
+        - "Every time"
+        - "Sometimes"
+        - "Only happened once"
+        - "Have not tried again"
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps"
+      description: "Starting from a fresh Rootnote tab with the built-in sample report, if you can."
+    validations:
+      required: false
+  - type: dropdown
+    id: where
+    attributes:
+      label: "Which Rootnote?"
+      options:
+        - "Online at rootnote.unravelnetworks.com"
+        - "Downloaded copy, run from a file"
+        - "Not sure"
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: "Rootnote version"
+      description: "Shown under About & licences, for example 0.1.4."
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: "Browser and version"
+      description: "For example Firefox 134 or Chrome 156."
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "Operating system and version"
+      description: "For example Windows 11, macOS 15.1, Ubuntu 24.04."
+    validations:
+      required: true
+  - type: input
+    id: consumer
+    attributes:
+      label: "If it involves the exported report: program and version"
+      description: "For example Word for Windows 365, Word for Mac, LibreOffice Writer 24.8."
+    validations:
+      required: false
+  - type: textarea
+    id: else
+    attributes:
+      label: "Anything else"
+      description: "Screenshots of the built-in sample or made-up data only. Check images for anything real before attaching."
+    validations:
+      required: false

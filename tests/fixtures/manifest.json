@@ -1,0 +1,16 @@
+[
+  {
+    "file": "small.json",
+    "findings": 3,
+    "images": 6,
+    "bytes": 772399,
+    "sha256": "f6ed0c1e6d565bd601c30996449bdd6d8a5405e451ce20f68b6b717df8d3a099"
+  },
+  {
+    "file": "bounds.json",
+    "findings": 20,
+    "images": 30,
+    "bytes": 3605810,
+    "sha256": "ee045e05f69dd5d5e8efdf24429fd4ecc5c6b7029a45770a4af38020a5c090c8"
+  }
+]

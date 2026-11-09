@@ -1,0 +1,48 @@
+# Tests. Fast checks on every push; the full browser suite (Chrome, Edge, Firefox on
+# Windows) weekly and on demand, because it takes about 40 minutes.
+name: Tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Unit tests (no browser)
+        run: node --test $(ls tests/*.test.mjs | grep -v '\.e2e\.')
+  browsers:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: All three browsers are installed (the harness would otherwise skip one)
+        shell: pwsh
+        run: |
+          foreach ($b in 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Mozilla Firefox/firefox.exe') {
+            if (-not (Test-Path $b)) { throw "missing $b" }
+          }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test

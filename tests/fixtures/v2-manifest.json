@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "generator": "generate-v2.mjs",
+  "fixtures": [
+    {
+      "file": "v2-small.json",
+      "bytes": 967348,
+      "sha256": "0ae2b02d2486851b9cbf489ef4491d94259afd876ee9e9a3bb2cff2f0be0edd3"
+    },
+    {
+      "file": "v2-bounds.json",
+      "bytes": 3803955,
+      "sha256": "4f15174644d8750d0c09ad0f5e2420afb12cb6526a3a25284db5799c652ad170"
+    }
+  ]
+}

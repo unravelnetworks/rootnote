@@ -1,0 +1,33 @@
+{
+  "name": "rootnote",
+  "version": "0.1.4",
+  "private": true,
+  "description": "Free, open-source pentest report writer: findings and screenshots to an editable Word report, in one offline HTML file.",
+  "license": "Apache-2.0",
+  "homepage": "https://rootnote.unravelnetworks.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unravelnetworks/rootnote.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test --test-concurrency=1 \"tests/**/*.test.mjs\"",
+    "release": "node scripts/release.mjs",
+    "site": "node site/build-site.mjs",
+    "site:serve": "node site/serve-headers.mjs 8644",
+    "guide:shots": "node site/guide-shots.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "axe-core": "4.10.2",
+    "esbuild": "0.25.0"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "docx": "9.5.1",
+    "jszip": "3.10.1"
+  }
+}
