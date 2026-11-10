@@ -22,21 +22,35 @@ const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
 const SITE_URL = 'https://rootnote.unravelnetworks.com';
 const NAV = [['/', 'Rootnote'], ['/guide/', 'Guide'], ['/privacy/', 'Privacy'], ['/licence/', 'Licence'], ['/security/', 'Security']];
-function page(path, title, body, { wide = false } = {}) {
+const DESCRIPTION = 'Rootnote turns pentest screenshots and notes into an editable Word report. Free and open source, one HTML file, works offline.';
+// Static JSON-LD is a data block, not script: the site CSP needs no script-src for it.
+// '<' is escaped so no value can close the element.
+const jsonLd = (data) => `<script type="application/ld+json">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script>`;
+const indexed = []; // canonical pages for sitemap.xml
+// nav: the NAV entry to mark current; url: this page's own path (canonical), or null for the 404 page.
+function page(nav, title, body, { wide = false, url = nav, description = DESCRIPTION, head = '' } = {}) {
+  const path = nav;
+  if (url) indexed.push(url);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<meta name="description" content="Rootnote turns pentest screenshots and notes into an editable Word report. Free and open source, one HTML file, works offline.">
+<meta name="description" content="${esc(description)}">
+${url ? `<link rel="canonical" href="${SITE_URL}${url}">` : '<meta name="robots" content="noindex">'}
 <link rel="stylesheet" href="/assets/site.css">
 <link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="/assets/favicon-48.png" type="image/png" sizes="48x48">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rootnote by Unravel Networks">
 <meta property="og:title" content="${esc(title)}">
-<meta property="og:description" content="Free, open-source pentest report writer by Unravel Networks. Screenshots and notes to an editable Word report, offline.">
-<meta property="og:image" content="${SITE_URL}/assets/social-share.jpg">
+<meta property="og:description" content="${esc(description)}">
+${url ? `<meta property="og:url" content="${SITE_URL}${url}">
+` : ''}<meta property="og:image" content="${SITE_URL}/assets/social-share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@UnravelNetworks">${head}
 <meta name="theme-color" content="#0a0a0a">
 </head>
 <body>
@@ -80,6 +94,16 @@ const fp = zipHash
   ? `<p class="fp">SHA-256 of <code>${zipName}</code>: <code class="hash">${zipHash}</code><br>SHA-256 of the online page <code>/app/</code>: <code class="hash">${appHash}</code> · <a href="/guide/readme/#version-and-checking-your-copy">How to check</a></p>`
   : `<p class="fp">SHA-256 of the online page <code>/app/</code>: <code class="hash">${appHash}</code></p>`;
 
+// Who publishes Rootnote, and what it is. sameAs lists only accounts Unravel Networks controls.
+const ORG = { '@type': 'Organization', '@id': 'https://unravelnetworks.com/#organization', name: 'Unravel Networks', url: 'https://unravelnetworks.com/',
+  logo: `${SITE_URL}/assets/unravel-networks-logo.jpg`, email: 'support@unravelnetworks.com',
+  sameAs: ['https://github.com/unravelnetworks', 'https://www.linkedin.com/company/unravel-networks', 'https://x.com/UnravelNetworks'] };
+const LANDING_LD = { '@context': 'https://schema.org', '@graph': [ORG, {
+  '@type': 'SoftwareApplication', name: 'Rootnote', url: `${SITE_URL}/`, description: DESCRIPTION,
+  applicationCategory: 'BusinessApplication', operatingSystem: 'Web browser', softwareVersion: APP_VERSION,
+  license: 'https://www.apache.org/licenses/LICENSE-2.0', isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  publisher: { '@id': ORG['@id'] }, sameAs: ['https://github.com/unravelnetworks/rootnote'] }] };
 await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes to an editable Word pentest report', `
 <section class="hero">
   <div class="pitch">
@@ -118,7 +142,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <p><strong>Offline</strong>, unzip the download, check its SHA-256 against this page, and open <code>rootnote.html</code>. It works with the network unplugged.</p>
     <p>Check it yourself: open your browser's developer tools, Network tab, and use the app.</p></div>
   <div><h2>Limits, honestly</h2><ul>
-    <li>Per project: 20 findings, 30 screenshots (2 MB each), 25 MB file. These are the sizes we have tested, not a paid restriction; tell us if they get in your way.</li>
+    <li>Per project: 20 findings, 30 screenshots (2 MiB each), 25 MiB file. These are the sizes we have tested, not a paid restriction; tell us if they get in your way.</li>
     <li>One built-in report design; your own Word template is not supported.</li>
     <li>No scanner imports, CVSS 4.0, collaboration or AI.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
@@ -127,12 +151,24 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
 
 <section class="who"><h2>Who it's for</h2><p>Solo and freelance pentesters, and small teams, who deliver Word reports and don't want to run a reporting server or a template pipeline. Need collaboration and a shared finding database? A platform such as SysReptor, PwnDoc or Ghostwriter fits better.</p>
 <p>Rootnote is free and open source under the <a href="/licence/">Apache License 2.0</a>, including for paid client work. <a href="https://github.com/unravelnetworks/rootnote">Read the source code</a>; open source means you can check it, not that it has been audited. The reports you create are yours. Built by <a href="https://unravelnetworks.com/">Unravel Networks</a>.</p></section>
-`, { wide: true }));
+`, { wide: true, head: '\n' + jsonLd(LANDING_LD) }));
 
 const readme = markdown((await readFile(`${repo}release-template/README.md`, 'utf8'))
   .replace('Open `rootnote.html` in current', 'Open Rootnote online, or open `rootnote.html` from the download, in current'), { skipTitle: true });
 
 // The Guide: a project documentation site.
+const GUIDE_DESCRIPTIONS = {
+  '': 'The Rootnote guide: how to write pentest findings, add and black out screenshots, design the report and export an editable Word document.',
+  'start-here': 'Start here: open the sample, make a new pentest report in Rootnote, save the project file and export it to Word.',
+  findings: 'Write pentest findings in Rootnote: rating, CVSS 3.1 Base score, CWE, affected assets, references, and reusable finding text.',
+  screenshots: 'Add screenshots to Rootnote findings by pasting or dropping them, caption them, black out secrets and handle tall captures.',
+  'report-design': 'Design the Rootnote report: title, client and cover, logos, how findings are rated, and which sections appear in what order.',
+  files: 'Rootnote project files: saving, one folder per engagement, cloud folders, recovery drafts, and what to do if a file will not open.',
+  export: 'Export a Rootnote report to Word, CSV or print/PDF, and solve common export and opening problems.',
+  reference: 'Rootnote reference: project limits, tested browsers, keyboard shortcuts and how to check your download.',
+  glossary: 'Glossary of the terms used in Rootnote and its pentest reports.',
+  readme: 'The full Rootnote README as one page: what it does, how to run it online or offline, privacy, and how to check your copy.',
+};
 const topics = guideTopics().map((t) => ({ ...t, ready: true }));
 const href = (t) => `/guide/${t.slug ? t.slug + '/' : ''}`;
 // The README page stays reachable by link but is not a chapter in the menu.
@@ -158,7 +194,7 @@ ${md.html}
 ${md.toc.length ? `<aside class="docs-toc"><nav aria-label="On this page"><p>On this page</p><ul>${md.toc.map(([id, h]) => `<li><a href="#${id}">${esc(h)}</a></li>`).join('')}</ul></nav></aside>` : ''}
 </div>`;
   if (t.slug) await mkdir(out + `guide/${t.slug}`, { recursive: true });
-  await writeFile(out + `guide/${t.slug ? t.slug + '/' : ''}index.html`, page('/guide/', t.slug ? `${t.title} · Rootnote Guide` : 'Rootnote Guide', body, { wide: true }));
+  await writeFile(out + `guide/${t.slug ? t.slug + '/' : ''}index.html`, page('/guide/', t.slug ? `${t.title} · Rootnote Guide` : 'Rootnote Guide', body, { wide: true, url: href(t), description: GUIDE_DESCRIPTIONS[t.slug] }));
 }
 // Every link inside the Guide must reach an existing page and, with a #fragment, an existing id.
 {
@@ -201,7 +237,7 @@ await writeFile(out + 'privacy/index.html', page('/privacy/', 'Rootnote privacy'
 <h2>Email</h2>
 <p>If you write to support@ or security@unravelnetworks.com, we use your message only to answer it. Never send client data; use a synthetic example.</p>
 <h2>Contact</h2>
-<p>Unravel Networks, <a href="mailto:support@unravelnetworks.com">support@unravelnetworks.com</a>.</p>`));
+<p>Unravel Networks, <a href="mailto:support@unravelnetworks.com">support@unravelnetworks.com</a>.</p>`, { description: 'How Rootnote handles data: the app processes reports locally without uploading them. Website hosting, recovery drafts, email and privacy details.' }));
 
 const notices = await readFile(`${repo}release-template/THIRD-PARTY-NOTICES.md`, 'utf8');
 await writeFile(out + 'licence/index.html', page('/licence/', 'Rootnote licence', `
@@ -210,13 +246,26 @@ await writeFile(out + 'licence/index.html', page('/licence/', 'Rootnote licence'
 <pre class="legal">${esc(await readFile(`${repo}NOTICE`, 'utf8'))}</pre>
 <pre class="legal">${esc(await readFile(`${repo}LICENSE`, 'utf8'))}</pre>
 <h2 id="third-party">Third-party software notices</h2>
-<pre class="legal">${esc(notices)}</pre>`));
+<pre class="legal">${esc(notices)}</pre>`, { description: 'Rootnote is open source under the Apache License 2.0. Full licence text and third-party software notices.' }));
 
 // Help us check: what is not tested yet, and where to send results.
 await mkdir(out + 'help-us-check', { recursive: true });
-await writeFile(out + 'help-us-check/index.html', page('/help-us-check/', 'Help us check Rootnote', markdown(await readFile(new URL('./help-us-check.md', import.meta.url), 'utf8')).html));
-await writeFile(out + 'security/index.html', page('/security/', 'Rootnote security policy', markdown(await readFile(`${repo}SECURITY.md`, 'utf8')).html));
-await writeFile(out + '404.html', page('', 'Not found', '<h1>Page not found</h1><p><a href="/">Back to Rootnote</a></p>'));
+await writeFile(out + 'help-us-check/index.html', page('/help-us-check/', 'Help us check Rootnote', markdown(await readFile(new URL('./help-us-check.md', import.meta.url), 'utf8')).html, { description: 'Help check Rootnote on setups we have not tested yet, such as Word for Mac, LibreOffice and Safari PDF, using only made-up data.' }));
+await writeFile(out + 'security/index.html', page('/security/', 'Rootnote security policy', markdown(await readFile(`${repo}SECURITY.md`, 'utf8')).html, { description: 'How to report a security issue in Rootnote privately, and what to expect after you report it.' }));
+await writeFile(out + '404.html', page('', 'Not found', '<h1>Page not found</h1><p><a href="/">Back to Rootnote</a></p>', { url: null }));
+
+// Crawlers: the canonical pages above, and a robots.txt that points to them. Cloudflare may
+// prepend its own managed text to this file; the directives below still apply.
+await writeFile(out + 'sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${indexed.map((u) => `  <url><loc>${SITE_URL}${u}</loc></url>`).join('\n')}
+</urlset>
+`);
+await writeFile(out + 'robots.txt', `User-agent: *
+Allow: /
+
+Sitemap: ${SITE_URL}/sitemap.xml
+`);
 
 // Cloudflare Pages joins repeated headers with commas, so a path matching several rules gets
 // several policies, all enforced. /* therefore carries only the baseline (no fetch directives);
