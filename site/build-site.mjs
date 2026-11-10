@@ -111,6 +111,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <h1>From screenshots and notes to an editable Word pentest report.</h1>
     <p class="lede">Paste your evidence between the steps, black out what must not leave, and export a clean .docx you finish in Word. No install, no account, no server: your findings stay on your computer.</p>
     <p class="actions"><a class="btn" href="/app/">Open Rootnote online</a> ${dl}</p>
+    <p><a href="https://youtu.be/AHG4aabI8Lw">Watch the short demo on YouTube</a> (an edited walkthrough of the fictional sample).</p>
     ${fp}
   </div>
   <figure class="proof">
