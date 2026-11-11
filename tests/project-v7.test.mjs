@@ -161,7 +161,7 @@ test('a mixed 3.1 and 4.0 project saves and reopens unchanged, and Word shows ea
 test('a library with a 4.0 entry saves and reopens as library format 4', async () => {
   const { createEmptyLibrary, entryFromFinding, serializeLibrary, openLibraryFile } = await import('../src/app/library.js');
   const lib = { ...createEmptyLibrary(), entries: [entryFromFinding(mixed().findings[1]).entry] };
-  const text = serializeLibrary(lib, '0.2.0');
+  const text = serializeLibrary(lib, { appVersion: '0.2.0' });
   assert.match(text, /"libraryVersion":4/);
   const back = openLibraryFile(text, Buffer.byteLength(text));
   assert.equal(back.ok, true, back.errors?.join('; '));
