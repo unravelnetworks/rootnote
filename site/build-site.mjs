@@ -2,11 +2,12 @@
 //   /            landing page (no scripts)
 //   /app/        the app: byte-identical copy of dist/rootnote.html
 //   /guide/      the Guide (docs/guide) and the README as a page; /privacy/ /licence/ /security/ /help-us-check/
-//   /download/   the release zip + SHA256SUMS.txt (when a zip is given)
+//   /download/   the release zip, its sample Word report and SHA256SUMS.txt (when a zip is given)
 //   _headers     Cloudflare Pages security headers (app CSP mirrors the file's + frame-ancestors)
 // Usage: node site/build-site.mjs [path/to/rootnote-<version>.zip]
 // Nothing here runs scripts except /app/, and nothing loads from another site.
 import { createHash } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,13 +79,37 @@ await cp(here('site.css'), out + 'assets/site.css');
 await cp(here('assets/sample-summary.png'), out + 'assets/sample-summary.png');
 for (const a of ['favicon-32.png', 'favicon-48.png', 'apple-touch-icon.png', 'emblem-64.png', 'unravel-networks-logo.jpg', 'social-share.jpg']) await cp(here('assets/' + a), out + 'assets/' + a);
 
-let zipName = null, zipHash = null;
+/** One file from a zip, found by the end of its path (central directory; stored or deflated). */
+function unzipOne(zip, suffix) {
+  let e = zip.length - 22;
+  while (e >= 0 && zip.readUInt32LE(e) !== 0x06054b50) e--;
+  let at = zip.readUInt32LE(e + 16);
+  for (let i = 0, n = zip.readUInt16LE(e + 10); i < n; i++) {
+    const method = zip.readUInt16LE(at + 10), size = zip.readUInt32LE(at + 20), nameLen = zip.readUInt16LE(at + 28);
+    const extra = zip.readUInt16LE(at + 30), comment = zip.readUInt16LE(at + 32), local = zip.readUInt32LE(at + 42);
+    const name = zip.toString('utf8', at + 46, at + 46 + nameLen);
+    if (name.endsWith(suffix)) {
+      const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+      const data = zip.subarray(start, start + size);
+      return method === 0 ? Buffer.from(data) : inflateRawSync(data);
+    }
+    at += 46 + nameLen + extra + comment;
+  }
+  throw new Error(`${suffix} not found in the release zip`);
+}
+
+let zipName = null, zipHash = null, sampleName = null, sampleHash = null;
 if (zipPath) {
   const zip = await readFile(zipPath);
   zipName = basename(zipPath);
   zipHash = sha256(zip);
   await writeFile(out + 'download/' + zipName, zip);
-  await writeFile(out + 'download/SHA256SUMS.txt', `${zipHash}  ${zipName}\n${appHash}  rootnote.html (the page at /app/)\n`);
+  // The sample Word report from that zip, byte for byte, so it opens without unzipping.
+  const sample = unzipOne(zip, '/sample-report.docx');
+  sampleName = `${basename(zipPath, '.zip')}-sample-report.docx`;
+  sampleHash = sha256(sample);
+  await writeFile(out + 'download/' + sampleName, sample);
+  await writeFile(out + 'download/SHA256SUMS.txt', `${zipHash}  ${zipName}\n${sampleHash}  ${sampleName}\n${appHash}  rootnote.html (the page at /app/)\n`);
 } else console.warn('No release zip given: the landing page shows placeholders for the download.');
 
 const dl = zipName
@@ -111,7 +136,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <h1>From screenshots and notes to an editable Word pentest report.</h1>
     <p class="lede">Paste your evidence between the steps, black out what must not leave, and export a clean .docx you finish in Word. No install, no account, no server: your findings stay on your computer.</p>
     <p class="actions"><a class="btn" href="/app/">Open Rootnote online</a> ${dl}</p>
-    <p><a href="https://youtu.be/AHG4aabI8Lw">Watch the short demo on YouTube</a> (an edited walkthrough of the fictional sample).</p>
+    <p><a href="https://youtu.be/AHG4aabI8Lw">Watch the short demo on YouTube</a> (an edited walkthrough of the fictional sample).${sampleName ? ` Or <a href="/download/${sampleName}">download the sample Word report</a> (.docx, fictional client) to see the output in Word.` : ''}</p>
     ${fp}
   </div>
   <figure class="proof">
@@ -147,7 +172,8 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <li>One built-in report design; your own Word template is not supported.</li>
     <li>No scanner imports, CVSS 4.0, collaboration or AI.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
-    <p><a href="/guide/">Read the guide</a> · <a href="/help-us-check/">Help us check what is not tested yet</a></p></div>
+    <p><a href="/guide/">Read the guide</a> · <a href="/help-us-check/">Help us check what is not tested yet</a></p>
+    <p>Did something stop you finishing a report? <a href="https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml">Tell us in one short answer</a> or email support@unravelnetworks.com. Rootnote has no tracking, so this is how we decide what to build next.</p></div>
 </section>
 
 <section class="who"><h2>Who it's for</h2><p>Solo and freelance pentesters, and small teams, who deliver Word reports and don't want to run a reporting server or a template pipeline. Need collaboration and a shared finding database? A platform such as SysReptor, PwnDoc or Ghostwriter fits better: <a href="/alternatives/">see how they compare</a>.</p>

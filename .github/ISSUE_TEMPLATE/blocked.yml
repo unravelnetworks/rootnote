@@ -1,0 +1,41 @@
+name: "Something stopped me"
+description: "Rootnote could not get your report finished. One short answer helps us decide what to build next."
+labels: ["blocked"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Everything you post here is public and may be indexed or copied. Deleting a post cannot reliably undo its disclosure.**
+
+        **Never post client or employer material.** No real findings, hostnames, IPs or URLs, no screenshots of real systems, no exported reports or attachments from real work. Describe the problem in general terms or with made-up data.
+
+        **Rather not post in public?** Email the same answers to support@unravelnetworks.com. That is not permission to send client or employer files, which we cannot accept by any route.
+
+        Rootnote has no tracking, so this is how we learn what gets in your way. Replies are best effort.
+  - type: dropdown
+    id: what
+    attributes:
+      label: "What stopped you?"
+      options:
+        - "A feature I need is missing"
+        - "My report is bigger than the limits"
+        - "The Word output does not fit what I must deliver"
+        - "My browser or computer is not supported"
+        - "A step was confusing"
+        - "Something else"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: "What were you trying to finish, and where did it stop?"
+      description: "A sentence or two is enough."
+    validations:
+      required: true
+  - type: textarea
+    id: instead
+    attributes:
+      label: "What did you do instead?"
+      description: "For example another tool, or finishing it by hand in Word."
+    validations:
+      required: false
