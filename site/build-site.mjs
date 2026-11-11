@@ -323,6 +323,8 @@ await writeFile(out + '_headers', [
   ...['/', '/index.html', '/guide/*', '/help/*', '/privacy/*', '/licence/*', '/security/*', '/help-us-check/*', '/alternatives/*', '/download/*', '/assets/*', '/404.html', '/site-manifest.json'].map((p) => block(p, [`Content-Security-Policy: ${siteCsp}`])),
   block('/app/*', [`Content-Security-Policy: ${appCsp}; frame-ancestors 'none'`, 'Cache-Control: no-cache']),
   block('/download/*', ['Cache-Control: no-cache']),
+  // The host sends no type for .docx; with nosniff, say what it is so Word is offered to open it.
+  ...(sampleName ? [block(`/download/${sampleName}`, ['Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document'])] : []),
 ].join('\n'));
 
 await writeFile(out + 'site-manifest.json', JSON.stringify({ version: APP_VERSION, app: { path: '/app/', sha256: appHash }, zip: zipName && { path: `/download/${zipName}`, sha256: zipHash } }, null, 2) + '\n');
