@@ -61,3 +61,40 @@ test('a report with no findings has no Findings heading and no empty table', () 
   assert.doesNotMatch(md, /^## Findings$/m);
   assert.doesNotMatch(md, /^\| /m);
 });
+
+test('key facts the Word report hides stay hidden; Copy as Markdown for one finding still adds them', () => {
+  const p = sample();
+  p.project.findingStatusDisplay = { keyFacts: false, summaryColumn: false, counts: false };
+  p.project.classificationDisplay = { keyFacts: false, summaryColumn: false };
+  p.findings[0].vulnerabilityType = 'HIDDEN-CLASSIFICATION-PROBE';
+  const md = reportMarkdown(p);
+  assert.doesNotMatch(md, /\*\*Status:\*\*/);
+  assert.doesNotMatch(md, /HIDDEN-CLASSIFICATION-PROBE/);
+  const one = findingText(p, 0);
+  assert.match(one, /\*\*Status:\*\*/);
+  assert.match(one, /HIDDEN-CLASSIFICATION-PROBE/);
+});
+
+test('a subtitle that looks like a list or a rule stays literal text', () => {
+  for (const subtitle of ['- Draft', '1. Final', '---', '+ v2']) {
+    const p = sample();
+    p.project.subtitle = subtitle;
+    const line = reportMarkdown(p).split('\n')[2];
+    assert.ok(!/^([-+*]\s|\d+[.)]\s|---$)/.test(line), `${subtitle} -> ${line}`);
+  }
+});
+
+test('a code engagement row keeps every character in a fence', () => {
+  const p = sample();
+  const row = p.project.engagement.rows.find((x) => x.source === 'custom');
+  row.enabled = true;
+  row.format = 'code';
+  row.label = 'Code row';
+  row.value = 'GET /literal HTTP/1.1\n\tX-Header: value\n- body ```` end';
+  const md = reportMarkdown(p);
+  const start = md.indexOf('- **Code row:**');
+  const block = md.slice(start, md.indexOf('\n\n', md.indexOf('`````', start) + 5) + 1 || undefined);
+  const inner = block.split('\n').slice(3, -2).map((l) => l.slice(2)).join('\n');
+  assert.equal(inner, row.value);
+  assert.match(block, /`{5}/, 'fence longer than the four-backtick run inside');
+});

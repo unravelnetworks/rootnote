@@ -2503,7 +2503,7 @@ ${e.title}`.toLowerCase().includes(q));
           h('div', { class: 'eng-info' }, h('div', {}, summaryLine(state.summaries.get(f))), h('div', { class: 'hint' }, `${f.name} · ${size(f.size)} · ${when(f.modified)}`)),
           h('button', { type: 'button', class: 'secondary small-btn', 'data-testid': 'eng-open', onclick: () => openFromEngagement(c, e, f) }, 'Open'))),
         projects.length ? null : h('p', { class: 'hint' }, 'No project file in this folder.'),
-        others.length ? h('p', { class: 'eng-files' }, ...others.map((f) => h('span', { class: 'chip neutral', title: `${size(f.size)} · ${when(f.modified)}` }, f.kind === 'sheet' ? 'CSV · ' : f.name.toLowerCase().endsWith('.pdf') ? 'PDF · ' : 'Word · ', f.name))) : null);
+        others.length ? h('p', { class: 'eng-files' }, ...others.map((f) => h('span', { class: 'chip neutral', title: `${size(f.size)} · ${when(f.modified)}` }, f.kind === 'sheet' ? 'CSV · ' : /\.pdf$/i.test(f.name) ? 'PDF · ' : /\.md$/i.test(f.name) ? 'Markdown · ' : 'Word · ', f.name))) : null);
     };
     return h('section', { class: 'panel settings', 'data-testid': 'engagements' },
       h('h1', {}, 'Engagements'),
@@ -2512,7 +2512,7 @@ ${e.title}`.toLowerCase().includes(q));
         state?.write ? h('button', { type: 'button', class: 'secondary big', 'data-testid': 'eng-new', onclick: newEngagement }, icon('plus'), 'New engagement…') : null,
         state?.rest.length ? h('button', { type: 'button', class: 'secondary big', 'data-testid': 'eng-more', onclick: () => readSummaries() }, `Read ${state.rest.length} more project files`) : null),
       h('p', { class: 'quiet' }, canPickFolder()
-        ? 'When you open a project from here, Save and the Word and CSV exports write into its engagement folder.'
+        ? 'When you open a project from here, Save and the Word, Markdown and CSV exports write into its engagement folder.'
         : 'This browser can read the folders but cannot save into them: Save and exports go to your downloads.'),
       !state ? null : !state.tree.length
         ? h('div', { class: 'xcard' }, h('p', {}, 'No engagement folders found. Expected: the folder you chose › a customer folder › an engagement folder › the project file.'))

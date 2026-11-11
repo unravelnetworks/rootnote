@@ -107,7 +107,8 @@ for (const [engine, port] of [['chrome', 9587], ['firefox', 9687]]) test(`engage
       const mdName = "window.__read('Brightwater Logistics/2026-10 Customer portal').then((n) => n.find((x) => x.endsWith('-report.md')))";
       assert.ok(await b.waitFor(`${mdName}.then(Boolean)`, 10000));
       const md = await b.evaluate(`${mdName}.then((n) => window.__read('Brightwater Logistics/2026-10 Customer portal/' + n))`);
-      assert.ok(md.startsWith('# Customer Portal Security Assessment\n'), md.slice(0, 60));
+      // The open project here is the folder's own copy, renamed by an earlier step.
+      assert.ok(md.startsWith(`# ${await b.evaluate('window.__fieldnote.snapshot().project.title')}\n`), md.slice(0, 60));
       assert.match(md, /^## Findings$/m);
       assert.doesNotMatch(md, /data:image/);
       await b.evaluate("document.querySelector('[data-testid=export-csv]').click()");

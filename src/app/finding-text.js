@@ -14,7 +14,7 @@ export const codeSpan = (s) => {
   const pad = s.startsWith('`') || s.endsWith('`') ? ' ' : '';
   return `${ticks}${pad}${s}${pad}${ticks}`;
 };
-const fence = (s) => {
+export const fence = (s) => {
   const ticks = '`'.repeat(Math.max(3, longestRun(s) + 1));
   return `${ticks}\n${s}\n${ticks}`;
 };
@@ -51,20 +51,22 @@ export function findingText(project, index, { markdown = true } = {}) {
   return findingBlock(plan, f, markdown, 2) + '\n';
 }
 
-/** One planned finding; `level` is the Markdown heading level of its title (sections go one deeper). */
-export function findingBlock(plan, f, md, level) {
+/** One planned finding; `level` is the Markdown heading level of its title (sections go one deeper).
+ * A ticket handoff (one finding) always adds status and classification; the whole report shows
+ * exactly the key facts the Word report shows. */
+export function findingBlock(plan, f, md, level, { handoff = true } = {}) {
   const out = [];
   const hashes = '#'.repeat(level);
   const title = `${f.displayId} ${f.title || '(untitled)'}`;
   out.push(md ? `${hashes} ${escapeMd(title)}` : `${title}\n${'='.repeat(Math.min(title.length, 72))}`);
 
-  // Key facts as in the report; the status is always included, since a ticket needs it.
+  // Key facts as in the report; for a ticket the status is always included, since a ticket needs it.
   const facts = f.keyFacts.filter((k) => k.key !== 'id');
-  if (f.status && !facts.some((k) => k.key === 'status')) facts.push({ label: plan.labels.status, value: f.status.label });
+  if (handoff && f.status && !facts.some((k) => k.key === 'status')) facts.push({ label: plan.labels.status, value: f.status.label });
   // So is the classification (v6), whatever the report shows.
-  if (f.classification?.vulnerabilityType && !facts.some((k) => k.key === 'vulnerabilityType')) facts.push({ label: plan.labels.vulnerabilityType, value: f.classification.vulnerabilityType });
-  if (f.classification?.cwe && !facts.some((k) => k.key === 'cwe')) facts.push({ label: plan.labels.cwe, value: f.classification.cwe });
-  out.push(facts.map((k) => (md
+  if (handoff && f.classification?.vulnerabilityType && !facts.some((k) => k.key === 'vulnerabilityType')) facts.push({ label: plan.labels.vulnerabilityType, value: f.classification.vulnerabilityType });
+  if (handoff && f.classification?.cwe && !facts.some((k) => k.key === 'cwe')) facts.push({ label: plan.labels.cwe, value: f.classification.cwe });
+  if (facts.length || handoff) out.push(facts.map((k) => (md
     ? `- **${escapeMd(k.label)}:** ${escapeMd(k.value)}${k.detail ? ` (${codeSpan(k.detail)})` : ''}`
     : `${k.label}: ${k.value}${k.detail ? ` (${k.detail})` : ''}`)).join('\n'));
 

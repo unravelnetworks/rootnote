@@ -139,7 +139,7 @@ The app's messages round these limits to "2 MB" and "25 MB".
 
 | | Chrome, Edge | Firefox | Safari |
 |---|---|---|---|
-| Write, export Word, Markdown and CSV, print | Yes | Yes | Writing, preview and Word export checked by hand; PDF printing not yet confirmed |
+| Write, export Word and CSV, print | Yes | Yes | Writing, preview and Word export checked by hand; PDF printing not yet confirmed |
 | Save to the same file again | Yes | No: each save is a download | No: each save is a download |
 | Engagement folders | Read and save into them | Read only; saves are downloads | Not checked |
 

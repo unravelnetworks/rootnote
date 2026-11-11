@@ -6,11 +6,11 @@
 
 export const ENGAGEMENT_LIMITS = { projectBytes: 25 * 1024 * 1024, batchFiles: 50, batchBytes: 200 * 1024 * 1024, name: 100 };
 
-/** What a file in an engagement folder is: 'project', 'report' (Word or PDF), 'sheet' (CSV), or null (ignored). */
+/** What a file in an engagement folder is: 'project', 'report' (Word, PDF or Markdown), 'sheet' (CSV), or null (ignored). */
 export function kindOf(name) {
   // Projects saved before the rename to Rootnote end in.fieldnote.json.
   if (/\.(rootnote|fieldnote)\.json$/i.test(name)) return 'project';
-  if (/\.(docx|pdf)$/i.test(name)) return 'report';
+  if (/\.(docx|pdf|md)$/i.test(name)) return 'report';
   if (/\.csv$/i.test(name)) return 'sheet';
   return null;
 }
