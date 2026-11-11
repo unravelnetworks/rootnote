@@ -1,4 +1,4 @@
-// Project model, import validation and v1 -> v2 -> v3 -> v4 -> v5 -> v6 migration.
+// Project model, import validation and v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7 migration.
 // schema/project.schema.json (v1), project.v2/v3/v4.schema.json (all frozen) are the
 // contracts; the numbered rules in their top $comment are enforced here
 // because JSON Schema cannot express them.
@@ -6,7 +6,7 @@
 import { stripImageMetadata } from './image-metadata.js';
 
 export const FORMAT = 'fieldnote-project';
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 export const LIMITS = Object.freeze({
   fileBytes: 26214400,
   imageBytes: 2097152,
@@ -70,6 +70,9 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 const DATA_URL = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const CVSS31 = /^CVSS:3\.1\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]$/;
+// Schema v7 also accepts a canonical CVSS 4.0 Base vector (the 11 Base metrics in FIRST order).
+const CVSS40 = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]$/;
+export const CVSS_VERSIONS = Object.freeze(['3.1', '4.0']);
 const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 // Rule 10: characters that are not valid XML 1.0 text, plus unpaired surrogates.
 const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -175,8 +178,8 @@ function defaultSettings({ migrated }) {
 
 const noLogo = () => ({ imageId: null, front: true, header: false, footer: false });
 
-/** New projects are schema v6 (createEmptyProjectV6). */
-export const createEmptyProject = (now = new Date()) => createEmptyProjectV6(now);
+/** New projects are schema v7 (createEmptyProjectV7). */
+export const createEmptyProject = (now = new Date()) => createEmptyProjectV7(now);
 
 /** Schema v3 empty project, kept for tests and fixtures of the v3 format. Screenshots go into
  * Additional details, so the separate Evidence gallery section starts disabled (v3 notes). */
@@ -370,6 +373,27 @@ export function migrateV5toV6(v5, { appVersion } = {}) {
   if (appVersion !== undefined) out.appVersion = appVersion;
   else if (v5.appVersion !== undefined) out.appVersion = v5.appVersion;
   return { ...out, createdAt: v5.createdAt, savedAt: v5.savedAt, project, findings, images: v5.images.map((im) => ({ ...im })) };
+}
+
+/** Schema v7 empty project: v6 with new findings scored in CVSS 3.1 by default, and a
+ * neutral score label, since every score in the report names its own version. */
+export function createEmptyProjectV7(now = new Date()) {
+  const p = createEmptyProjectV6(now);
+  p.schemaVersion = 7;
+  p.project.scoring.cvssVersion = '3.1';
+  p.project.labels.cvss = 'CVSS Base';
+  return p;
+}
+
+/** Converts a validated schema v6 project to v7 without changing any content: new findings
+ * keep opening the CVSS 3.1 calculator, and labels and vectors stay as they are. */
+export function migrateV6toV7(v6, { appVersion } = {}) {
+  const project = structuredClone(v6.project);
+  project.scoring.cvssVersion = '3.1';
+  const out = { format: FORMAT, schemaVersion: 7 };
+  if (appVersion !== undefined) out.appVersion = appVersion;
+  else if (v6.appVersion !== undefined) out.appVersion = v6.appVersion;
+  return { ...out, createdAt: v6.createdAt, savedAt: v6.savedAt, project, findings: v6.findings.map((f) => structuredClone(f)), images: v6.images.map((im) => ({ ...im })) };
 }
 
 /** At most `max` UTF-16 units, never splitting a surrogate pair (the validators' length rule). */
@@ -606,6 +630,16 @@ export async function validateProjectFileV4(raw, rawBytes, { decodeImage } = {})
   return validateProjectData(data, { decodeImage });
 }
 
+/** Validates a native schema v7 file in full and refuses any other version. */
+export async function validateProjectFileV7(raw, rawBytes, { decodeImage } = {}) {
+  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  let data;
+  try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
+  if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
+  if (data.schemaVersion !== 7) return { ok: false, errors: ['Not a schema v7 project file.'] };
+  return validateProjectData(data, { decodeImage });
+}
+
 /** Validates a native schema v6 file in full and refuses any other version. */
 export async function validateProjectFileV6(raw, rawBytes, { decodeImage } = {}) {
   if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
@@ -627,14 +661,14 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 }
 
 /**
- * Opens a project file for editing: validates it in its own version, converts v1 to v5
- * on to v6, and reports whether the converted project is over the 25 MB budget.
+ * Opens a project file for editing: validates it in its own version, converts v1 to v6
+ * on to v7, and reports whether the converted project is over the 25 MB budget.
  * Returns { ok: false, errors, newer? } or
- * { ok: true, project, migratedFrom: 1 | 2 | 3 | 4 | 5 | null, overBudgetBytes }.
- * overBudgetBytes > 0 happens only for a converted v1-v5 file that was within the
- * limit before conversion (v4 rule 7 recovery state). A v6 file is refused if the file
+ * { ok: true, project, migratedFrom: 1 | 2 | 3 | 4 | 5 | 6 | null, overBudgetBytes }.
+ * overBudgetBytes > 0 happens only for a converted v1-v6 file that was within the
+ * limit before conversion (v4 rule 7 recovery state). A v7 file is refused if the file
  * this app would save for it (with this appVersion and its savedAt format) exceeds the
- * limit, even when the raw file fits, so an opened v6 project can always be saved again.
+ * limit, even when the raw file fits, so an opened v7 project can always be saved again.
  */
 /** Removes hidden metadata from every screenshot of an opened project. Images in older
  * project files were kept byte for byte, so re-saved projects and Chrome/Edge PDFs would
@@ -674,8 +708,9 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage }
   const v3 = from <= 2 ? migrateV2toV3(v2, { appVersion }) : checked.project;
   const v4 = from <= 3 ? migrateV3toV4(v3, { appVersion }) : checked.project;
   const v5 = from <= 4 ? migrateV4toV5(v4, { appVersion }) : checked.project;
-  const project = migrateV5toV6(v5, { appVersion });
-  // Images were fully checked in the file's own version; the v6 pass checks only the
+  const v6 = from <= 5 ? migrateV5toV6(v5, { appVersion }) : checked.project;
+  const project = migrateV6toV7(v6, { appVersion });
+  // Images were fully checked in the file's own version; the v7 pass checks only the
   // converted structure. skipImageData is internal and cannot be set by callers or files.
   const again = await validateProjectData(project, { skipImageData: true });
   if (!again.ok) return { ok: false, errors: ['The file could not be converted to the current format.', ...again.errors] };
@@ -704,7 +739,7 @@ function parseProjectFile(raw, rawBytes) {
 async function validateProjectData(data, { decodeImage, skipImageData = false } = {}) {
   const errors = [];
   const v = data.schemaVersion;
-  if (![1, 2, 3, 4, 5, 6].includes(v)) return { ok: false, errors: ['Unsupported schemaVersion.'] };
+  if (![1, 2, 3, 4, 5, 6, 7].includes(v)) return { ok: false, errors: ['Unsupported schemaVersion.'] };
 
   // At most 100 messages (5 are shown): a hostile file with millions of bad entries must not
   // build millions of strings.
@@ -749,7 +784,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
   if (!isObject(p)) {
     err('project', 'missing');
   } else {
-    checkKeys(p, v === 1 ? PROJECT_KEYS_V1 : v === 6 ? PROJECT_KEYS_V6 : v === 5 ? PROJECT_KEYS_V5 : v === 4 ? PROJECT_KEYS_V4 : PROJECT_KEYS_V2, 'project');
+    checkKeys(p, v === 1 ? PROJECT_KEYS_V1 : v >= 6 ? PROJECT_KEYS_V6 : v === 5 ? PROJECT_KEYS_V5 : v === 4 ? PROJECT_KEYS_V4 : PROJECT_KEYS_V2, 'project');
     line(p.title, 'project.title', true);
     for (const k of ['client', 'testerName', 'organisation', 'classification']) line(p[k], `project.${k}`);
     if (p.reportVersion !== undefined && (typeof p.reportVersion !== 'string' || p.reportVersion.length > 32)) err('project.reportVersion', 'invalid');
@@ -795,7 +830,10 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
       for (const k of ['description', 'reproduction', 'impact', 'recommendation']) text(f[k], `${path}.${k}`);
     } else {
       if (!(f.rating === null || SEVERITIES.includes(f.rating))) err(`${path}.rating`, 'invalid rating');
-      if (!(f.cvss === null || (typeof f.cvss === 'string' && CVSS31.test(f.cvss)))) err(`${path}.cvss`, 'must be a CVSS 3.1 Base vector (CVSS:3.1/AV:_/AC:_/PR:_/UI:_/S:_/C:_/I:_/A:_) or empty');
+      // Versions 1-6 accept only CVSS 3.1; v7 also accepts a canonical CVSS 4.0 Base vector.
+      if (!(f.cvss === null || (typeof f.cvss === 'string' && (CVSS31.test(f.cvss) || (v >= 7 && CVSS40.test(f.cvss)))))) {
+        err(`${path}.cvss`, v >= 7 ? 'must be a canonical CVSS 3.1 or 4.0 Base vector, or empty' : 'must be a CVSS 3.1 Base vector (CVSS:3.1/AV:_/AC:_/PR:_/UI:_/S:_/C:_/I:_/A:_) or empty');
+      }
       const formatKeys = v === 2 ? TEXT_SECTIONS : FORMAT_KEYS;
       for (const k of formatKeys) text(f[k], `${path}.${k}`);
       if (object(f.formats, `${path}.formats`, formatKeys)) {
@@ -983,7 +1021,11 @@ function validateSettingsV2(p, { err, line, text, label, bool, object, logos, v 
       for (const k of ['front', 'header', 'footer']) if (r[k] !== undefined) bool(r[k], `${path}.${k}`);
     }
   }
-  if (object(p.scoring, 'project.scoring', ['mode']) && !SCORING_MODES.includes(p.scoring.mode)) err('project.scoring.mode', `must be one of ${SCORING_MODES.join(', ')}`);
+  if (object(p.scoring, 'project.scoring', v >= 7 ? ['mode', 'cvssVersion'] : ['mode'])) {
+    if (!SCORING_MODES.includes(p.scoring.mode)) err('project.scoring.mode', `must be one of ${SCORING_MODES.join(', ')}`);
+    // v7: which calculator a finding without a vector opens with. Never rewrites stored vectors.
+    if (v >= 7 && !CVSS_VERSIONS.includes(p.scoring.cvssVersion)) err('project.scoring.cvssVersion', 'must be 3.1 or 4.0');
+  }
   if (object(p.engagement, 'project.engagement', ['rows'])) {
     const rows = p.engagement.rows;
     if (!Array.isArray(rows) || rows.length > LIMITS.engagementRows) err('project.engagement.rows', `must be a list of at most ${LIMITS.engagementRows}`);

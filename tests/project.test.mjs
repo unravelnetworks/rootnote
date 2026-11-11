@@ -82,7 +82,7 @@ const rejects = async (name, mutate, pattern) => {
   });
 };
 
-rejects('newer schema', (p) => { p.schemaVersion = 7; }, /newer version/);
+rejects('newer schema', (p) => { p.schemaVersion = 8; }, /newer version/);
 rejects('wrong format marker', (p) => { p.format = 'x'; }, /Not a project file/);
 rejects('unknown field', (p) => { p.findings[0].html = '<b>'; }, /unknown field/);
 rejects('id 000', (p) => { p.findings[0].id = 'F-000'; }, /F-001/);

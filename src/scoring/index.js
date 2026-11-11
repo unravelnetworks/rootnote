@@ -1,6 +1,8 @@
 // Original implementation of FIRST CVSS 3.1 Base equations, section 7 / Appendix A.
 // https://www.first.org/cvss/v3.1/specification-document
-// No Temporal/Environmental or CVSS 4.0 calculation; no dependencies or I/O.
+// No Temporal/Environmental calculation; no dependencies or I/O. CVSS 4.0 Base is in cvss40.js.
+import { parseCvss40 } from './cvss40.js';
+export { parseCvss40 } from './cvss40.js';
 const ORDER = ['AV', 'AC', 'PR', 'UI', 'S', 'C', 'I', 'A'];
 const VALUES = { AV: 'NALP', AC: 'LH', PR: 'NLH', UI: 'NR', S: 'UC', C: 'NLH', I: 'NLH', A: 'NLH' };
 const IMPACT = { N: 0, L: 0.22, H: 0.56 };
@@ -43,7 +45,24 @@ export function parseCvss31(input) {
 
 export const scoreCvss31 = input => parseCvss31(input).score;
 
-/** FIRST v3.1 qualitative Base-score bands; null is unscored, never zero. */
+/** The CVSS version a stored vector names ('3.1' or '4.0'), or null for no vector. Never
+ * inferred from the report default. Throws for any other text. */
+export function cvssVersion(vector) {
+  if (vector === null || vector === undefined) return null;
+  if (typeof vector === 'string' && vector.startsWith('CVSS:3.1/')) return '3.1';
+  if (typeof vector === 'string' && vector.startsWith('CVSS:4.0/')) return '4.0';
+  throw new Error('Enter a CVSS 3.1 or 4.0 Base vector.');
+}
+
+/** A CVSS 3.1 or 4.0 Base vector, by its prefix: { version, vector, metrics, score }. Callers
+ * that must accept only 3.1 (older file versions) keep using parseCvss31. */
+export function parseCvss(input) {
+  const version = cvssVersion(input);
+  if (version === null) throw new Error('Enter a CVSS 3.1 or 4.0 Base vector.');
+  return { version, ...(version === '4.0' ? parseCvss40(input) : parseCvss31(input)) };
+}
+
+/** FIRST qualitative bands, the same for CVSS 3.1 and 4.0; null is unscored, never zero. */
 export function cvssBand(score) {
   if (score === null) return null;
   if (!Number.isFinite(score) || score < 0 || score > 10) throw new Error('Invalid CVSS Base score.');
@@ -76,6 +95,6 @@ export function ratingCounts(doc) {
       return f.rating;
     }));
   if (mode.includes('cvss')) distributions.push(distribution('cvss', labels.cvss,
-    ['Critical', 'High', 'Medium', 'Low', 'None'], f => f.cvss === null ? null : cvssBand(scoreCvss31(f.cvss))));
+    ['Critical', 'High', 'Medium', 'Low', 'None'], f => f.cvss === null ? null : cvssBand(parseCvss(f.cvss).score)));
   return { mode, total, distributions };
 }

@@ -2,7 +2,7 @@
 // Pure ESM: no DOM, canvas, docx, I/O, or application-state mutations.
 import { resolveFindingPrefix, REPORT_SECTIONS, FINDING_SECTIONS, REPORT_SECTIONS_V4, REPORT_SECTIONS_V5, FINDING_SECTIONS_V4, SCORING_MODES, LIMITS, savedSize, screenshotRefs, detailsTextLength, validateReferences,
   CUSTOM_LIMITS, CUSTOM_SECTION_ID, customKey, customTitleErrors, cweErrors, vulnerabilityTypeErrors } from '../app/project.js';
-import { parseCvss31, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
+import { parseCvss, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
 import { reportDesign, ratingBadge, cvssBadge } from './design.js';
 export { resolveFindingPrefix } from '../app/project.js';
 
@@ -33,8 +33,10 @@ function scoring(finding, mode, labels) {
   const result = [];
   if (mode !== 'cvss') result.push({ key: 'rating', label: mode.startsWith('risk') ? labels.risk : labels.severity, value: finding.rating ?? labels.unscored, badge:ratingBadge(finding.rating) });
   if (mode.includes('cvss')) {
-    const parsed = finding.cvss === null ? null : parseCvss31(finding.cvss);
-    result.push({ key: 'cvss', label: labels.cvss, value: parsed ? parsed.score.toFixed(1) : labels.unscored, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
+    // Every score names its own CVSS version: a report may hold 3.1 and 4.0 findings, and the
+    // authored label cannot say which one a given score is.
+    const parsed = finding.cvss === null ? null : parseCvss(finding.cvss);
+    result.push({ key: 'cvss', label: labels.cvss, value: parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
   }
   return result;
 }
@@ -109,7 +111,7 @@ function partsFor(image, figure, geometry, labels) {
 }
 
 export function createReportPlan(project, { paperSize = project?.project?.paperSize } = {}) {
-  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v6 project and A4/Letter paper are required.');
+  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6,7].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v7 project and A4/Letter paper are required.');
   if (!Array.isArray(project.findings) || project.findings.length > 20 || !Array.isArray(project.images) || project.images.length > 32 || savedSize(project) > LIMITS.fileBytes) throw new Error('Project exceeds supported bounds.');
   const p = project.project, mode = p.scoring.mode, v4=project.schemaVersion>=4;
   if (!SCORING_MODES.includes(mode)) throw new Error('Unsupported scoring mode.');

@@ -6,7 +6,7 @@
 // hidden in the report are left empty.
 // UTF-8 with a byte-order mark and CRLF line ends, which Excel reads correctly.
 import { resolveFindingPrefix } from './project.js';
-import { parseCvss31, formatFindingStatus } from '../scoring/index.js';
+import { parseCvss, formatFindingStatus } from '../scoring/index.js';
 
 // Also after leading spaces or invisible characters, and full-width look-alikes, since some
 // spreadsheet imports trim or fold them, including direction marks,
@@ -34,7 +34,8 @@ export function findingsCsv(doc) {
     labels.status, labels.vulnerabilityType ?? 'Vulnerability type', labels.cwe ?? 'CWE', label('assets'), label('description'), label('details'),
     label('impact'), label('threat'), label('recommendation'), label('references')];
   const rows = doc.findings.map((f, i) => {
-    const score = f.cvss ? parseCvss31(f.cvss).score.toFixed(1) : '';
+    // The score stays a number; the vector column next to it names its CVSS version.
+    const score = f.cvss ? parseCvss(f.cvss).score.toFixed(1) : '';
     const details = !shown('details') ? '' : (f.details ?? []).map((b) => (b.type === 'text' ? b.text
       : `[Screenshot ${b.imageId}${images.get(b.imageId)?.caption ? `: ${images.get(b.imageId).caption}` : ''}]`)).join('\n\n');
     const evidence = !shown('evidence') ? [] : (f.evidence ?? []).map((id) => `[Screenshot ${id}${images.get(id)?.caption ? `: ${images.get(id).caption}` : ''}]`);
