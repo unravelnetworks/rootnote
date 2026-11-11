@@ -1,6 +1,6 @@
 {
   "app": "dist/rootnote.html",
-  "appSha256": "09eab2beeab754216f1f5625ea61daf83580e4de0372a993724f4b88046b228a",
+  "appSha256": "026cf706890b56bc1941a2b3f1c0451bb0db8eaac9b2b0454ed0c1c11542bbc9",
   "viewport": "1280x1000@2",
   "theme": "light",
   "shots": [
@@ -50,7 +50,7 @@
       "name": "export",
       "steps": "Check & export: paper size and the Word export button, marked 1",
       "size": "356x86",
-      "sha256": "c44abada91d64423fc95e1471bc3d91ebf6befea5455a226867b4d1de42e5fb4"
+      "sha256": "0853db331348439aca587a0c3cf1102a38cc0a7e8441ac71aadfb3943873c574"
     },
     {
       "name": "new-report",
@@ -62,7 +62,7 @@
       "name": "facts",
       "steps": "first finding: tag, key facts and CVSS calculator; Severity marked 1, CVSS calculator marked 2",
       "size": "589x363",
-      "sha256": "9e8818bd4ba2d4006ea1e41ba55d14a8ba75d929b80bbadaf62b6a901a79fab3"
+      "sha256": "2a9104702c66ccad10f1659a0f5419b1eeb2054b0bcbc4311504efda50dd2e0c"
     },
     {
       "name": "blocks",
@@ -96,15 +96,15 @@
     },
     {
       "name": "sections",
-      "steps": "Sections & scoring: Scoring choice marked 1 and the report section list",
-      "size": "394x145",
-      "sha256": "b22a8175bade94997c4f69ef0bc12129700828fdafc0f03986691bc871c598c6"
+      "steps": "Sections & scoring: Scoring choice marked 1, New findings use (CVSS version) marked 2",
+      "size": "758x164",
+      "sha256": "936262d51f933f7eeb574438c171e4bf930f60972592c16ddd7d6fb2085a676e"
     },
     {
       "name": "section-list",
       "steps": "Sections & scoring: report sections in order; a Show box marked 1, the move arrows marked 2",
       "size": "746x407",
-      "sha256": "ea650968898bc51202a8527439c5bf5ff1687bb80107530d93bc5660c100e292"
+      "sha256": "ee61a9fcae6ae6e3a54d062c1b2cb0cf7d08807e79b83931ab2624ea47d55869"
     },
     {
       "name": "recovery",
@@ -119,5 +119,5 @@
       "sha256": "db35f344b596eb4ee47bfcbbac7aade4d4869697db403e7ea6caf2db063ecca8"
     }
   ],
-  "browser": "Chrome/156.0.8078.74"
+  "browser": "Chrome/156.0.8078.81"
 }

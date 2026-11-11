@@ -136,3 +136,34 @@ test('every display option works on a v7 project: status counts and column, clas
   assert.ok(plan.summary.columns.some((c) => c.key === 'status') && plan.summary.columns.some((c) => c.key === 'classification'));
   assert.equal(plan.reportSections[0].kind, 'contents');
 });
+
+test('a mixed 3.1 and 4.0 project saves and reopens unchanged, and Word shows each version on A4 and Letter', async () => {
+  const { default: JSZip } = await import('jszip');
+  const { exportDocx } = await import('../src/export-docx/index.js');
+  const d = mixed();
+  Object.assign(d.project.findingStatusDisplay, { keyFacts: true, summaryColumn: true, counts: true });
+  Object.assign(d.project.classificationDisplay, { keyFacts: true, summaryColumn: true });
+  d.project.engagementId = 'A-VERY-LONG-ENGAGEMENT-IDENTIFIER-2026';
+  d.findings.forEach((f) => { f.cwe = 'CWE-79'; f.vulnerabilityType = 'Stored cross-site scripting'; });
+  const raw = json(d);
+  const r = await openProjectFile(raw, Buffer.byteLength(raw));
+  assert.equal(r.ok, true, r.errors?.join('; '));
+  assert.equal(r.migratedFrom, null);
+  assert.deepEqual(r.project, d, 'nothing changes on reopen');
+  for (const paperSize of ['A4', 'Letter']) {
+    const xml = await (await JSZip.loadAsync(await exportDocx(r.project, { paperSize }))).file('word/document.xml').async('string');
+    assert.match(xml, /9\.8 \(3\.1\)/, paperSize);
+    assert.match(xml, /9\.3 \(4\.0\)/, paperSize);
+    assert.match(xml, /CVSS:4\.0\/AV:N\/AC:L\/AT:N/, `${paperSize}: the vector is kept as stored`);
+  }
+});
+
+test('a library with a 4.0 entry saves and reopens as library format 4', async () => {
+  const { createEmptyLibrary, entryFromFinding, serializeLibrary, openLibraryFile } = await import('../src/app/library.js');
+  const lib = { ...createEmptyLibrary(), entries: [entryFromFinding(mixed().findings[1]).entry] };
+  const text = serializeLibrary(lib, '0.2.0');
+  assert.match(text, /"libraryVersion":4/);
+  const back = openLibraryFile(text, Buffer.byteLength(text));
+  assert.equal(back.ok, true, back.errors?.join('; '));
+  assert.equal(back.library.entries[0].cvss, V40);
+});

@@ -45,8 +45,9 @@ export function parseCvss31(input) {
 
 export const scoreCvss31 = input => parseCvss31(input).score;
 
-/** The CVSS version a stored vector names ('3.1' or '4.0'), or null for no vector. Never
- * inferred from the report default. Throws for any other text. */
+/** The CVSS version a vector's prefix names ('3.1' or '4.0'), or null for no vector. It reads
+ * the prefix only and does not validate the metrics (parseCvss does). Never inferred from the
+ * report default. Throws for text with any other prefix. */
 export function cvssVersion(vector) {
   if (vector === null || vector === undefined) return null;
   if (typeof vector === 'string' && vector.startsWith('CVSS:3.1/')) return '3.1';

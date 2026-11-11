@@ -1270,6 +1270,14 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         if (setField(f, 'cvss', parsed.vector)) {
           if (parsed.version !== version) { cvssDraftVersion.delete(f.id); renderNav(); render(); return; }
           showCvssNote(null); syncCalculator(); renderNav();
+        } else {
+          // Refused (the 25 MB budget): the box and menus go back to what is stored, and the
+          // note says the pasted vector was not kept.
+          e.target.value = f.cvss || '';
+          syncCalculator();
+          typedError = null;
+          cvssNote.textContent = `Not saved: the project is at its size limit. ${stored()}`;
+          cvssNote.dataset.kind = 'error';
         }
       },
       onblur: (e) => { if (f.cvss && e.target.value.trim() !== f.cvss && !typedError) e.target.value = f.cvss; },
@@ -1301,11 +1309,11 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       onchange: async (e) => {
         const next = e.target.value;
         if (next === version) return;
-        const before = { doc, cvss: f.cvss };
+        const before = { doc, cvss: f.cvss, gen: generation, rev: revision };
         if (f.cvss) {
           const ok = await confirmDialog(`Switch ${displayId(f)} to CVSS ${next}? Its CVSS ${version} vector is removed; Rootnote does not convert scores between versions.`, `Use CVSS ${next}`);
-          // Another project, a removed finding or a changed vector while the dialog was open: do nothing.
-          if (!ok || doc !== before.doc || !doc.findings.includes(f) || f.cvss !== before.cvss) { e.target.value = version; return; }
+          // Any change while the dialog was open (another project, an edit, a removed finding): do nothing.
+          if (!ok || generation !== before.gen || revision !== before.rev || doc !== before.doc || !doc.findings.includes(f) || f.cvss !== before.cvss) { e.target.value = version; return; }
           if (!setField(f, 'cvss', null)) { e.target.value = version; return; }
         }
         cvssDraftVersion.set(f.id, next);

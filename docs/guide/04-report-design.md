@@ -18,9 +18,9 @@ Open **Page, cover and logos** in **Details & cover**.
 
 ## How findings are rated
 
-In **Sections & scoring**, choose **Scoring** (1): severity, risk or CVSS, alone or together. **New findings use** sets whether a finding without a score opens the CVSS 3.1 or the CVSS 4.0 calculator.
+In **Sections & scoring**, choose **Scoring** (1): severity, risk or CVSS, alone or together. **New findings use** (2) sets whether a finding without a score opens the CVSS 3.1 or the CVSS 4.0 calculator.
 
-![The Scoring choice marked 1.](__IMG_SECTIONS__)
+![The Scoring choice marked 1 and New findings use marked 2.](__IMG_SECTIONS__)
 
 The report's *How findings are rated* section explains your method to the reader. It is text you can edit, so make sure it matches how you rated the findings.
 
