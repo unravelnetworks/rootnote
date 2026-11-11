@@ -1,3 +1,3 @@
-# Published Rootnote 0.1.4 (source tag v0.1.4, commit b92b0a5), 2026-11-09
-b0aea07dd3b936e77bf1242170b6004e4f5a4177ccc7fa1cb4a34f8de629ea54 /app/
-1c12c817a740b435abddb37f08aa3f1d62bb68ae213fd49f4ed54b04e79ab4c3 /download/rootnote-0.1.4.zip
+# Published Rootnote 0.1.5 (source tag v0.1.5, commit e606e5f), 2026-11-12
+92c9bfbefe6f43f51ecbaee8941192dc1c011d6213accee6ad0579daf8764670 /app/
+e3ba7c970c8e98e96c27dd20a28b74ef672171ccbe3b4551b61901cab1d3e03d /download/rootnote-0.1.5.zip
