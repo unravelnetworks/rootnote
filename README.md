@@ -6,6 +6,8 @@ Rootnote is a free, open-source pentest report writer. Organise findings and scr
 
 - Use it online, or download it: https://rootnote.unravelnetworks.com (also attached to each [GitHub release](https://github.com/unravelnetworks/rootnote/releases))
 - Step-by-step guide: https://rootnote.unravelnetworks.com/guide/
+- Short demo video (an edited walkthrough of the fictional sample): https://youtu.be/AHG4aabI8Lw
+- How it compares with other pentest reporting tools: https://rootnote.unravelnetworks.com/alternatives/
 - Licence: [Apache-2.0](LICENSE). Third-party components keep their own licences; see [THIRD-PARTY-NOTICES](release-template/THIRD-PARTY-NOTICES.md).
 
 Developed with AI-assisted tooling; reviewed and maintained by Unravel Networks.
@@ -19,7 +21,7 @@ Open source means you can read, build and check the code. Rootnote has not had a
 - Word output with real styles, numbered figure captions and a findings summary that links to each finding.
 - A built-in sample report (fictional client, synthetic evidence) and starter findings.
 
-This release supports up to 20 findings and 30 screenshots per project, with a 25 MB project-file limit. These limits reflect the report sizes we have tested, rather than a paid-tier restriction. Tell us if they prevent your normal work.
+This release supports up to 20 findings and 30 screenshots per project, with a 25 MiB project-file limit. These limits reflect the report sizes we have tested, rather than a paid-tier restriction. Tell us if they prevent your normal work.
 
 What has been tested: Windows desktop Chrome, Edge and Firefox. Basic Safari/macOS use and iPhone 11 Pro Safari exploration have been checked by hand. Safari PDF verification and native document-consumer checks (Word for Mac, LibreOffice) are still incomplete. Phone report writing and saving is not qualified.
 
