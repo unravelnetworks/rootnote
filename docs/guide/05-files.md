@@ -5,7 +5,7 @@ Rootnote has no server and no account. Your work lives in files that you keep.
 ## Your files
 
 - **Project file** (ends in `.rootnote.json`): the whole report, with its screenshots. Open it to keep working.
-- **Exported report** (Word, CSV or PDF): a copy made from the project. Editing it does not change the project.
+- **Exported report** (Word, Markdown, CSV or PDF): a copy made from the project. Editing it does not change the project.
 - **Library file**: your reusable findings. See [the finding library](../findings/#reuse-findings-with-the-library).
 
 Treat project files and reports as confidential client material.

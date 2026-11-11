@@ -12,6 +12,7 @@ test('file kinds: projects, Word and PDF reports, CSV sheets; everything else ig
   assert.equal(kindOf('report.docx'), 'report');
   assert.equal(kindOf('report.pdf'), 'report');
   assert.equal(kindOf('findings.csv'), 'sheet');
+  assert.equal(kindOf('portal-report.md'), 'report');
   for (const n of ['notes.txt', 'portal.json', 'library.rootnote-library.json', 'x.docx.tmp']) assert.equal(kindOf(n), null, n);
 });
 

@@ -7,7 +7,7 @@ The words Rootnote uses, and what they mean in this guide.
 | Term | Meaning |
 |---|---|
 | Additional details | The part of a finding where text blocks and screenshots alternate in reading order. |
-| Check & export | The view that lists reminders before export and makes the Word, CSV and PDF output. |
+| Check & export | The view that lists reminders before export and makes the Word, Markdown, CSV and PDF output. |
 | CVSS 3.1 Base | A standard score for a vulnerability, built from metrics you choose. Rootnote calculates the Base vector and score only. |
 | CWE | Common Weakness Enumeration: a standard number for the kind of weakness, for example CWE-79 for cross-site scripting. |
 | Engagement | One piece of work for one client, for example a web application test. |

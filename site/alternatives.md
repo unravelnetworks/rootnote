@@ -8,7 +8,7 @@ Every fact about another tool links to that project's own repository or document
 
 | Tool | Licence | How it runs | Collaboration | Report output | CVSS |
 |---|---|---|---|---|---|
-| Rootnote | Apache-2.0 | One HTML file in a desktop browser | None | Word, CSV, print to PDF | 3.1 Base |
+| Rootnote | Apache-2.0 | One HTML file in a desktop browser | None | Word, Markdown, CSV, print to PDF | 3.1 Base |
 | SysReptor | SysReptor Community License (source-available) | Self-hosted or cloud | Live co-editing in the paid Professional edition | PDF | 3.1 and 4.0 |
 | PwnDoc | MIT | Self-hosted | Multi-user, real time | Word | 3 and 4 |
 | PwnDoc-ng | MIT | Self-hosted | Multi-user, co-editing | Word, own templates | 3.1 |
@@ -57,7 +57,7 @@ Every fact about another tool links to that project's own repository or document
 - One HTML file that runs in your browser, online or downloaded. No install, no account, no server to run.
 - The app processes your report on your own computer and does not upload it.
 - Works offline once downloaded.
-- Exports an editable Word report with styles, numbered figures and a linked findings summary, plus CSV.
+- Exports an editable Word report with styles, numbered figures and a linked findings summary, plus the whole report as Markdown and the findings as CSV.
 - CVSS 3.1 Base, CWE, affected assets and references for each finding.
 - Limits: 20 findings, 30 screenshots and a 25 MiB project file. These are the sizes we have tested.
 - Tested on Windows in Chrome, Edge and Firefox. Basic use in Safari on macOS has been checked by hand.

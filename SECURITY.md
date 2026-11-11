@@ -23,9 +23,9 @@ Never send client data, real screenshots or real project files.
 ## In scope
 
 - Code running from files the app opens (project, library, image, CSV/Word output that
-  runs code in Word or a spreadsheet).
+  runs code in Word or a spreadsheet), or Markdown output that runs code when a viewer renders it.
 - Any way the app sends data off the device, or loads anything from the network.
-- Hidden data (image metadata, deleted text) surviving into saved projects, Word or CSV.
+- Hidden data (image metadata, deleted text) surviving into saved projects, Word, Markdown or CSV.
 - The hosted copy and its security headers, once it is online.
 
 Out of scope: problems that need an already compromised computer or browser (malware,

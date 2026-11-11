@@ -1,6 +1,6 @@
 # Export and solve problems
 
-**Check & export** looks over the report and makes the files you deliver: a Word report, a CSV of the findings, or a PDF.
+**Check & export** looks over the report and makes the files you deliver: a Word report, the report as Markdown, a CSV of the findings, or a PDF.
 
 ## Check before you export
 
@@ -26,6 +26,10 @@ The preview is close to the Word file, but Word lays out the pages itself, so pa
 ## Findings as CSV
 
 **Findings as CSV** makes a spreadsheet with one row per finding, for example to track fixes. Images are not included: each screenshot is replaced by text with its ID and caption.
+
+## Report as Markdown
+
+**Report as Markdown** saves the whole report as one Markdown (.md) file, for a wiki, a Git repository or a ticket system. It keeps your section names, order and finding IDs, and leaves out hidden sections. Screenshots are not included: each one becomes a line naming its figure and caption. The table of contents and the count tables are left out.
 
 ## PDF
 

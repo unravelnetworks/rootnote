@@ -7,14 +7,14 @@
 import { createReportPlan } from '../export-docx/plan.js';
 
 const ESCAPE = /[\\`*_[\]<>|#~]/g;
-const escapeMd = (s) => s.replace(ESCAPE, '\\$&');
+export const escapeMd = (s) => s.replace(ESCAPE, '\\$&');
 const longestRun = (s) => Math.max(0, ...(s.match(/`+/g) ?? []).map((r) => r.length));
-const codeSpan = (s) => {
+export const codeSpan = (s) => {
   const ticks = '`'.repeat(longestRun(s) + 1);
   const pad = s.startsWith('`') || s.endsWith('`') ? ' ' : '';
   return `${ticks}${pad}${s}${pad}${ticks}`;
 };
-const fence = (s) => {
+export const fence = (s) => {
   const ticks = '`'.repeat(Math.max(3, longestRun(s) + 1));
   return `${ticks}\n${s}\n${ticks}`;
 };
@@ -22,7 +22,7 @@ const isBullet = (line) => /^- /.test(line);
 
 /** Text of a plain or code field, following the report's rules: a blank line starts a
  * paragraph and a line starting with "- " is a bullet. */
-function body(text, format, md) {
+export function body(text, format, md) {
   if (format === 'code') return md ? fence(text) : text;
   if (!md) return text.trim();
   return text.trim().split(/\n{2,}/).map((para) => {
@@ -45,21 +45,28 @@ function figureText(image, md, labels) {
 
 /** Markdown (default) or plain text for the finding at `index` of `project`. */
 export function findingText(project, index, { markdown = true } = {}) {
-  const md = markdown;
   const plan = createReportPlan(project);
   const f = plan.findings[index];
   if (!f) throw new Error(`no finding at ${index}`);
-  const out = [];
-  const title = `${f.displayId} ${f.title || '(untitled)'}`;
-  out.push(md ? `## ${escapeMd(title)}` : `${title}\n${'='.repeat(Math.min(title.length, 72))}`);
+  return findingBlock(plan, f, markdown, 2) + '\n';
+}
 
-  // Key facts as in the report; the status is always included, since a ticket needs it.
+/** One planned finding; `level` is the Markdown heading level of its title (sections go one deeper).
+ * A ticket handoff (one finding) always adds status and classification; the whole report shows
+ * exactly the key facts the Word report shows. */
+export function findingBlock(plan, f, md, level, { handoff = true } = {}) {
+  const out = [];
+  const hashes = '#'.repeat(level);
+  const title = `${f.displayId} ${f.title || '(untitled)'}`;
+  out.push(md ? `${hashes} ${escapeMd(title)}` : `${title}\n${'='.repeat(Math.min(title.length, 72))}`);
+
+  // Key facts as in the report; for a ticket the status is always included, since a ticket needs it.
   const facts = f.keyFacts.filter((k) => k.key !== 'id');
-  if (f.status && !facts.some((k) => k.key === 'status')) facts.push({ label: plan.labels.status, value: f.status.label });
+  if (handoff && f.status && !facts.some((k) => k.key === 'status')) facts.push({ label: plan.labels.status, value: f.status.label });
   // So is the classification (v6), whatever the report shows.
-  if (f.classification?.vulnerabilityType && !facts.some((k) => k.key === 'vulnerabilityType')) facts.push({ label: plan.labels.vulnerabilityType, value: f.classification.vulnerabilityType });
-  if (f.classification?.cwe && !facts.some((k) => k.key === 'cwe')) facts.push({ label: plan.labels.cwe, value: f.classification.cwe });
-  out.push(facts.map((k) => (md
+  if (handoff && f.classification?.vulnerabilityType && !facts.some((k) => k.key === 'vulnerabilityType')) facts.push({ label: plan.labels.vulnerabilityType, value: f.classification.vulnerabilityType });
+  if (handoff && f.classification?.cwe && !facts.some((k) => k.key === 'cwe')) facts.push({ label: plan.labels.cwe, value: f.classification.cwe });
+  if (facts.length || handoff) out.push(facts.map((k) => (md
     ? `- **${escapeMd(k.label)}:** ${escapeMd(k.value)}${k.detail ? ` (${codeSpan(k.detail)})` : ''}`
     : `${k.label}: ${k.value}${k.detail ? ` (${k.detail})` : ''}`)).join('\n'));
 
@@ -81,7 +88,7 @@ export function findingText(project, index, { markdown = true } = {}) {
     }
     const content = parts.filter((p) => p.trim() !== '').join('\n\n');
     if (!content) continue;
-    out.push(md ? `### ${escapeMd(s.label)}` : `${s.label}\n${'-'.repeat(Math.min(s.label.length, 72))}`, content);
+    out.push(md ? `${hashes}# ${escapeMd(s.label)}` : `${s.label}\n${'-'.repeat(Math.min(s.label.length, 72))}`, content);
   }
-  return out.join('\n\n') + '\n';
+  return out.join('\n\n');
 }

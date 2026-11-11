@@ -1,6 +1,6 @@
 # Rootnote
 
-Rootnote is a free, open-source pentest report writer. Organise findings and screenshots, then export an editable Word report (also CSV and print/PDF). It is one HTML file that runs in your browser, online or downloaded, and your report content is processed on your computer: there is no report upload and no report database.
+Rootnote is a free, open-source pentest report writer. Organise findings and screenshots, then export an editable Word report (also Markdown, CSV and print/PDF). It is one HTML file that runs in your browser, online or downloaded, and your report content is processed on your computer: there is no report upload and no report database.
 
 ![Rootnote with the built-in fictional sample: a finding being edited, with the live report preview beside it](docs/images/rootnote-sample.png)
 
