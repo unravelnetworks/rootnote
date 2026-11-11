@@ -9,9 +9,11 @@ body:
 
         **Never post client or employer material.** No real findings, hostnames, IPs or URLs, no screenshots of real systems, no exported reports or attachments from real work. Describe the problem in general terms or with made-up data.
 
+        **Security vulnerability?** Do not post it here. Email security@unravelnetworks.com; see the [security page](https://rootnote.unravelnetworks.com/security/).
+
         **Rather not post in public?** Email the same answers to support@unravelnetworks.com. That is not permission to send client or employer files, which we cannot accept by any route.
 
-        Rootnote has no tracking, so this is how we learn what gets in your way. Replies are best effort.
+        Rootnote has no usage telemetry, so this is how we learn what gets in your way. Replies are best effort.
   - type: dropdown
     id: what
     attributes:

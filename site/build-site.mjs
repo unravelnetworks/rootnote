@@ -173,7 +173,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <li>No scanner imports, CVSS 4.0, collaboration or AI.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
     <p><a href="/guide/">Read the guide</a> · <a href="/help-us-check/">Help us check what is not tested yet</a></p>
-    <p>Did something stop you finishing a report? <a href="https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml">Tell us in one short answer</a> or email support@unravelnetworks.com. Rootnote has no tracking, so this is how we decide what to build next.</p></div>
+    <p>Did something stop you finishing a report? <a href="https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml">Tell us in one short answer</a> (public, so no client details) or email support@unravelnetworks.com. Rootnote has no usage telemetry, so this is how we decide what to build next.</p></div>
 </section>
 
 <section class="who"><h2>Who it's for</h2><p>Solo and freelance pentesters, and small teams, who deliver Word reports and don't want to run a reporting server or a template pipeline. Need collaboration and a shared finding database? A platform such as SysReptor, PwnDoc or Ghostwriter fits better: <a href="/alternatives/">see how they compare</a>.</p>

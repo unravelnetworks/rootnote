@@ -48,6 +48,6 @@ In Firefox, links inside the PDF are printed as plain text. The Word file keeps 
 
 ## Getting help
 
-Did something stop you finishing a report? [Tell us in one short answer](https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml) (public, so no client details) or email support@unravelnetworks.com. Rootnote has no tracking, so this is how we decide what to build next.
+Did something stop you finishing a report? [Tell us in one short answer](https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml) (public, so no client details) or email support@unravelnetworks.com. Rootnote has no usage telemetry, so this is how we decide what to build next.
 
 Email support@unravelnetworks.com. Rootnote is free, so support is best effort. Report security issues privately to security@unravelnetworks.com; see the [Security policy](/security/).
