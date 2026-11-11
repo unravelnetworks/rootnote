@@ -47,7 +47,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-UI]').value"), 'R');
       await b.evaluate("(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), null);
-      assert.equal(await b.evaluate("[...document.querySelectorAll('[data-testid^=cvss-]')].filter((s) => s.tagName === 'SELECT').every((s) => s.value === '')"), true);
+      assert.equal(await b.evaluate("[...document.querySelectorAll('[data-testid^=cvss-]')].filter((s) => s.tagName === 'SELECT' && s.dataset.testid !== 'cvss-version').every((s) => s.value === '')"), true);
     });
 
     await t.test('blanking a menu keeps the stored vector and says the calculator is incomplete', async () => {
@@ -80,13 +80,69 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()");
       await b.evaluate("(() => { const s = document.querySelector('[data-testid=scoring-mode]'); s.value = 'cvss'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
       let d = await dot();
-      assert.equal(d.title, 'CVSS 3.1 Base: 9.8');
+      assert.equal(d.title, 'CVSS 3.1 Base: 9.8 (3.1)', 'a converted file keeps its label; the score names its version');
       assert.equal(d.bg, 'rgb(123, 31, 162)', 'Critical band colour, not the hidden Low rating');
       assert.equal(await b.evaluate(`${snap}.findings[0].rating`), 'Low', 'hidden rating preserved');
       // A finding without a vector is Unscored, with no colour.
       d = await b.evaluate("(() => { const d = document.querySelectorAll('.nav [data-testid=rating-dot]')[1]; return { title: d.title, rated: d.dataset.rated ?? null }; })()");
       assert.equal(d.title, 'CVSS 3.1 Base: Unscored');
       assert.equal(d.rated, null);
+    });
+
+    const first = "document.querySelectorAll('.nav li.sortable .navitem')[0].click()";
+    const setVersion = (v) => `(() => { const s = document.querySelector('[data-testid=cvss-version]'); s.value = '${v}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`;
+    const V40 = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+
+    await t.test('switching a scored finding to CVSS 4.0 asks first; cancelling keeps the 3.1 vector', async () => {
+      await b.evaluate(first);
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '3.1', 'the stored vector decides the version');
+      await b.evaluate(setVersion('4.0'));
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      assert.match(await b.evaluate("document.querySelector('dialog.confirm').textContent"), /does not convert scores between versions/);
+      await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
+      assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H');
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '3.1');
+    });
+
+    await t.test('agreeing removes the vector (Unscored, not 0) and shows the eleven CVSS 4.0 metrics', async () => {
+      await b.evaluate(setVersion('4.0'));
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings[0].cvss === null`));
+      assert.ok(await b.waitFor("!!document.querySelector('[data-testid=cvss-AT]')"));
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '4.0');
+      assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-S]')"), false, 'no 3.1 Scope menu');
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-calculator] summary').textContent"), /CVSS 4\.0 calculator/);
+      const metrics = { AV: 'N', AC: 'L', AT: 'N', PR: 'N', UI: 'N', VC: 'H', VI: 'H', VA: 'H', SC: 'N', SI: 'N', SA: 'N' };
+      for (const [k, v] of Object.entries(metrics).slice(0, 10)) await b.evaluate(pick(k, v));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), null, 'nothing stored until all eleven are chosen');
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /all eleven metrics/);
+      await b.evaluate(pick('SA', 'N'));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40);
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /Score 9\.3 \(CVSS 4\.0 Base/);
+      const dot = await b.evaluate("document.querySelector('.nav [data-testid=rating-dot]').title");
+      assert.equal(dot, 'CVSS 3.1 Base: 9.3 (4.0)', 'the old label stays; the score names 4.0');
+    });
+
+    await t.test('pasting a 3.1 vector into a 4.0 finding switches it back; extra 4.0 metrics are refused', async () => {
+      await b.evaluate("(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:A'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-note]').dataset.kind"), 'error');
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40, 'the stored vector stays');
+      await b.evaluate("(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]').value === '3.1'"));
+      assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-S]')"), true);
+    });
+
+    await t.test('the report default picks the calculator for a finding without a vector', async () => {
+      await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()");
+      await b.evaluate("(() => { const s = document.querySelector('[data-testid=cvss-default-version]'); s.value = '4.0'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      assert.equal(await b.evaluate(`${snap}.project.scoring.cvssVersion`), '4.0');
+      await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[1].click()");
+      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]')?.value === '4.0'"));
+      assert.equal(await b.evaluate(`${snap}.findings[1].cvss`), null);
+      await b.evaluate(first);
+      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]')?.value === '3.1'"), 'a stored 3.1 vector is not reinterpreted');
     });
     assert.deepEqual(b.errors, [], 'page errors or CSP violations');
     assert.deepEqual(b.requests, [], 'network requests');

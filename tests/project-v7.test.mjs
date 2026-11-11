@@ -125,3 +125,14 @@ test('New from settings keeps the CVSS version choice, never findings or vectors
   assert.equal(fresh.project.scoring.cvssVersion, '4.0');
   assert.deepEqual(fresh.findings, []);
 });
+
+test('every display option works on a v7 project: status counts and column, classification column, Contents', () => {
+  const d = mixed();
+  Object.assign(d.project.findingStatusDisplay, { keyFacts: true, summaryColumn: true, counts: true });
+  Object.assign(d.project.classificationDisplay, { keyFacts: true, summaryColumn: true });
+  for (const s of d.project.sections.report) s.enabled = true;
+  const plan = createReportPlan(d);
+  assert.ok(plan.summary.statusCounts, 'status counts are built');
+  assert.ok(plan.summary.columns.some((c) => c.key === 'status') && plan.summary.columns.some((c) => c.key === 'classification'));
+  assert.equal(plan.reportSections[0].kind, 'contents');
+});

@@ -239,7 +239,7 @@ test('Check & export scans custom sections; Copy as text always includes the cla
 });
 
 test('library v3 keeps CWE and type; v1 and v2 entries open with none; bad values are refused', () => {
-  assert.equal(LIBRARY_VERSION, 3);
+  assert.ok(LIBRARY_VERSION >= 3, 'library v3 fields stay in later versions');
   const f = finding(1, { cwe: 'CWE-79', vulnerabilityType: 'Stored XSS' });
   const { entry } = entryFromFinding(f);
   assert.equal(entry.cwe, 'CWE-79');

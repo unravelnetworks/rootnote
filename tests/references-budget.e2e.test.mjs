@@ -120,7 +120,7 @@ for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`copy a
     assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
     await b.setFile('[data-testid=open-input]', file);
     assert.ok(await b.waitFor(`${snap}.findings.length === 20`, 90000));
-    assert.equal(await b.evaluate(`${snap}.schemaVersion`), 6);
+    assert.equal(await b.evaluate(`${snap}.schemaVersion`), 7);
     await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent.includes('Budget finding 1')).click()");
     await b.evaluate("document.querySelector('[data-testid=copy-finding]').click()");
     assert.ok(await b.waitFor("!!document.querySelector('[data-testid=copy-dialog][open]')"));

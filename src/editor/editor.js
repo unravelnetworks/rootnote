@@ -20,7 +20,7 @@ import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem 
 import { findingsCsv } from '../app/csv.js';
 import { checklist } from './checklist.js';
 import { canPickSaveLocation, pickSaveFile, writeToHandle, saveErrorText } from './save.js';
-import { parseCvss31, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
+import { parseCvss, cvssVersion, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
 import { createReportPlan, resolveEngagementValue } from '../export-docx/plan.js';
 import { findingText } from '../app/finding-text.js';
 import { reportMarkdown } from '../app/report-markdown.js';
@@ -40,9 +40,25 @@ const CVSS_METRICS = [
   ['I', 'Integrity', [['N', 'None'], ['L', 'Low'], ['H', 'High']]],
   ['A', 'Availability', [['N', 'None'], ['L', 'Low'], ['H', 'High']]],
 ];
+// CVSS 4.0 Base metrics in FIRST order (src/scoring/cvss40.js scores them).
+const HLN = [['H', 'High'], ['L', 'Low'], ['N', 'None']];
+const CVSS40_METRICS = [
+  ['AV', 'Attack vector', [['N', 'Network'], ['A', 'Adjacent'], ['L', 'Local'], ['P', 'Physical']]],
+  ['AC', 'Attack complexity', [['L', 'Low'], ['H', 'High']]],
+  ['AT', 'Attack requirements', [['N', 'None'], ['P', 'Present']]],
+  ['PR', 'Privileges required', [['N', 'None'], ['L', 'Low'], ['H', 'High']]],
+  ['UI', 'User interaction', [['N', 'None'], ['P', 'Passive'], ['A', 'Active']]],
+  ['VC', 'Vulnerable system confidentiality', HLN],
+  ['VI', 'Vulnerable system integrity', HLN],
+  ['VA', 'Vulnerable system availability', HLN],
+  ['SC', 'Subsequent system confidentiality', HLN],
+  ['SI', 'Subsequent system integrity', HLN],
+  ['SA', 'Subsequent system availability', HLN],
+];
+const CVSS_EXAMPLE = { '3.1': 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H', '4.0': 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N' };
 
 const SCORING_MODE_TEXT = {
-  severity: 'Severity', risk: 'Risk', cvss: 'CVSS 3.1 Base', 'severity+cvss': 'Severity and CVSS 3.1 Base', 'risk+cvss': 'Risk and CVSS 3.1 Base',
+  severity: 'Severity', risk: 'Risk', cvss: 'CVSS Base', 'severity+cvss': 'Severity and CVSS Base', 'risk+cvss': 'Risk and CVSS Base',
 };
 const ENGAGEMENT_SOURCE_TEXT = {
   engagementId: 'Engagement ID', client: 'Client', testerName: 'Tester', organisation: 'Organisation',
@@ -80,6 +96,11 @@ const SECTION_HELP = {
 
 export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMITS.findings, edition = null }) {
   let doc = createEmptyProject();
+  // CVSS version chosen for a finding that has no vector yet; on screen only, never saved.
+  // A WeakMap keyed by the project, so New and Open start from the report default.
+  const draftVersions = new WeakMap();
+  const cvssDraftVersion = { get: (id) => draftVersions.get(doc)?.get(id), delete: (id) => draftVersions.get(doc)?.delete(id),
+    set: (id, v) => { if (!draftVersions.has(doc)) draftVersions.set(doc, new Map()); draftVersions.get(doc).set(id, v); } };
   let view = 'start'; // first run: the start screen, until the user picks a way in
   // which setting groups the user has opened, and whether the engagement table
   // is being designed (names, order, rows) or filled in. Kept across redraws, not saved.
@@ -399,9 +420,10 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       const labels = doc.project.labels;
       let badge, title;
       if (mode === 'cvss') {
-        const score = f.cvss ? parseCvss31(f.cvss).score : null;
+        const parsed = f.cvss ? parseCvss(f.cvss) : null;
+        const score = parsed?.score ?? null;
         badge = cvssBadge(score);
-        title = `${labels.cvss}: ${score === null ? labels.unscored : score.toFixed(1)}`;
+        title = `${labels.cvss}: ${parsed ? `${score.toFixed(1)} (${parsed.version})` : labels.unscored}`;
       } else {
         badge = ratingBadge(f.rating);
         title = `${mode.startsWith('risk') ? labels.risk : labels.severity}: ${f.rating || labels.unscored}`;
@@ -1037,6 +1059,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         field('Scoring', h('select', { 'data-testid': 'scoring-mode', onchange: (e) => { if (!setField(p.scoring, 'mode', e.target.value)) e.target.value = p.scoring.mode; else renderNav(); } },
           ...SCORING_MODES.map((m) => h('option', { value: m, selected: p.scoring.mode === m }, SCORING_MODE_TEXT[m]))),
         'Shown in the findings summary and in each finding. Risk is the rating you assign; it is not calculated. Values you hide stay saved.'),
+        field('New findings use', h('select', { 'data-testid': 'cvss-default-version', onchange: (e) => { if (!setField(p.scoring, 'cvssVersion', e.target.value)) e.target.value = p.scoring.cvssVersion; } },
+          ...['3.1', '4.0'].map((v) => h('option', { value: v, selected: p.scoring.cvssVersion === v }, `CVSS ${v} Base`))),
+        'The calculator a finding opens with when it has no vector yet. Each finding keeps its own version, and every score in the report names it. Changing this never changes a score you entered.'),
         h('div', { class: 'field' }, checkbox(p, 'backToSummaryLinks', 'Add a link back to the findings summary under each finding')))),
       card('Finding status in the report', h('div', { class: 'field', 'data-testid': 'status-display' },
         checkbox(p.findingStatusDisplay, 'keyFacts', 'Show the status in each finding\'s key facts'),
@@ -1210,45 +1235,56 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       h('option', { value: '', selected: f.rating === null }, labels.unscored),
       ...SEVERITIES.map((s) => h('option', { value: s, selected: f.rating === s }, s)));
     const cvssNote = h('span', { class: 'hint', 'data-testid': 'cvss-note' });
+    // The calculator version: the stored vector's own version, or for a finding without a
+    // vector a choice held only on screen (cvssDraftVersion), starting from the report default.
+    const version = f.cvss ? cvssVersion(f.cvss) : cvssDraftVersion.get(f.id) ?? doc.project.scoring.cvssVersion ?? '3.1';
+    const metricsFor = version === '4.0' ? CVSS40_METRICS : CVSS_METRICS;
     // The note always describes the stored vector, plus whichever pending state applies:
     // invalid typed text (kept until replaced by a valid vector or cleared), or an
-    // incomplete calculator (the stored vector stays until all eight metrics are chosen).
+    // incomplete calculator (the stored vector stays until every metric is chosen).
     let typedError = null;
-    const stored = () => (f.cvss ? `Score ${parseCvss31(f.cvss).score.toFixed(1)} (CVSS 3.1 Base, calculated from the vector).` : 'Empty means not scored.');
+    const stored = () => {
+      if (!f.cvss) return 'Empty means not scored.';
+      const parsed = parseCvss(f.cvss);
+      return `Score ${parsed.score.toFixed(1)} (CVSS ${parsed.version} Base, calculated from the vector).`;
+    };
     const showCvssNote = (error = typedError, incomplete = false) => {
       typedError = error;
       cvssNote.textContent = error
-        ? `${error} Not saved until it is valid, for example CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H. ${f.cvss ? `Still stored: ${f.cvss}.` : ''}`.trim()
+        ? `${error} Not saved until it is valid, for example ${CVSS_EXAMPLE[version]}. ${f.cvss ? `Still stored: ${f.cvss}.` : ''}`.trim()
         : incomplete
-          ? `Calculator incomplete: choose all eight metrics to change the vector. ${f.cvss ? `Still stored: ${stored()}` : 'Nothing stored yet.'}`
+          ? `Calculator incomplete: choose all ${metricsFor.length === 8 ? 'eight' : 'eleven'} metrics to change the vector. ${f.cvss ? `Still stored: ${stored()}` : 'Nothing stored yet.'}`
           : stored();
       cvssNote.dataset.kind = error ? 'error' : incomplete ? 'pending' : '';
     };
     showCvssNote(null);
     const cvss = h('input', {
-      type: 'text', class: 'mono', value: f.cvss || '', maxlength: 64, spellcheck: 'false', 'data-testid': 'cvss', placeholder: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+      type: 'text', class: 'mono', value: f.cvss || '', maxlength: 64, spellcheck: 'false', 'data-testid': 'cvss', placeholder: CVSS_EXAMPLE[version],
       oninput: (e) => {
         const v = e.target.value.trim();
         if (v === '') { setField(f, 'cvss', null); showCvssNote(null); syncCalculator(); renderNav(); return; }
         let parsed;
-        try { parsed = parseCvss31(v); } catch (err) { showCvssNote(err.message); return; }
-        // Only the canonical metric order is stored; the box shows what the user typed
-        // until it is re-rendered.
-        if (setField(f, 'cvss', parsed.vector)) { showCvssNote(null); syncCalculator(); renderNav(); }
+        try { parsed = parseCvss(v); } catch (err) { showCvssNote(err.message); return; }
+        // A pasted vector names its own version; only the canonical metric order is stored.
+        // The box shows what the user typed until it is re-rendered.
+        if (setField(f, 'cvss', parsed.vector)) {
+          if (parsed.version !== version) { cvssDraftVersion.delete(f.id); renderNav(); render(); return; }
+          showCvssNote(null); syncCalculator(); renderNav();
+        }
       },
       onblur: (e) => { if (f.cvss && e.target.value.trim() !== f.cvss && !typedError) e.target.value = f.cvss; },
     });
-    // CVSS calculator: pick the eight Base metrics; the vector and score follow. The
-    // arithmetic is src/scoring (CVSS 3.1 specification); nothing else is stored.
-    const picked = f.cvss ? { ...parseCvss31(f.cvss).metrics } : {};
-    const selects = CVSS_METRICS.map(([key, name, values]) => {
+    // CVSS calculator: pick the Base metrics; the vector and score follow. The arithmetic is
+    // src/scoring (CVSS 3.1 specification, FIRST CVSS 4.0 reference); nothing else is stored.
+    const picked = f.cvss ? { ...parseCvss(f.cvss).metrics } : {};
+    const selects = metricsFor.map(([key, name, values]) => {
       const sel = h('select', { 'data-testid': `cvss-${key}`, 'aria-label': name,
         onchange: (e) => {
           picked[key] = e.target.value;
-          if (CVSS_METRICS.every(([k]) => picked[k])) {
-            const vector = `CVSS:3.1/${CVSS_METRICS.map(([k]) => `${k}:${picked[k]}`).join('/')}`;
+          if (metricsFor.every(([k]) => picked[k])) {
+            const vector = `CVSS:${version}/${metricsFor.map(([k]) => `${k}:${picked[k]}`).join('/')}`;
             // A complete calculator replaces any invalid typed text with a valid vector.
-            if (setField(f, 'cvss', parseCvss31(vector).vector)) { cvss.value = f.cvss; showCvssNote(null); renderNav(); }
+            if (setField(f, 'cvss', parseCvss(vector).vector)) { cvss.value = f.cvss; showCvssNote(null); renderNav(); }
             else { syncCalculator(); showCvssNote(); } // refused (budget): menus show the stored vector again
           } else showCvssNote(typedError, true);
         } },
@@ -1257,11 +1293,30 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       return h('label', { class: 'field' }, h('span', { class: 'label' }, name), sel);
     });
     function syncCalculator() {
-      const m = f.cvss ? parseCvss31(f.cvss).metrics : {};
-      CVSS_METRICS.forEach(([key], i) => { picked[key] = m[key]; selects[i].querySelector('select').value = m[key] ?? ''; });
+      const m = f.cvss && cvssVersion(f.cvss) === version ? parseCvss(f.cvss).metrics : {};
+      metricsFor.forEach(([key], i) => { picked[key] = m[key]; selects[i].querySelector('select').value = m[key] ?? ''; });
     }
+    // Switching version never converts: a stored vector is removed only after the user agrees.
+    const versionSelect = h('select', { 'data-testid': 'cvss-version', 'aria-label': 'CVSS version for this finding',
+      onchange: async (e) => {
+        const next = e.target.value;
+        if (next === version) return;
+        const before = { doc, cvss: f.cvss };
+        if (f.cvss) {
+          const ok = await confirmDialog(`Switch ${displayId(f)} to CVSS ${next}? Its CVSS ${version} vector is removed; Rootnote does not convert scores between versions.`, `Use CVSS ${next}`);
+          // Another project, a removed finding or a changed vector while the dialog was open: do nothing.
+          if (!ok || doc !== before.doc || !doc.findings.includes(f) || f.cvss !== before.cvss) { e.target.value = version; return; }
+          if (!setField(f, 'cvss', null)) { e.target.value = version; return; }
+        }
+        cvssDraftVersion.set(f.id, next);
+        renderNav();
+        render();
+      } },
+      ...['3.1', '4.0'].map((v) => h('option', { value: v, selected: v === version }, `CVSS ${v}`)));
     const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator' },
-      h('summary', {}, 'CVSS calculator'),
+      h('summary', {}, `CVSS ${version} calculator`),
+      h('label', { class: 'field' }, h('span', { class: 'label' }, 'CVSS version for this finding'), versionSelect),
+      version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
       h('div', { class: 'cvss-grid' }, ...selects));
     return [
       field(showRating ? ratingLabel : `${ratingLabel} (hidden by the scoring setting)`, rating),
@@ -1615,10 +1670,13 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   function findingTag(f) {
     const { mode } = doc.project.scoring;
     const labels = doc.project.labels;
-    const score = f.cvss ? parseCvss31(f.cvss).score : null;
+    const parsed = f.cvss ? parseCvss(f.cvss) : null;
+    const score = parsed?.score ?? null;
+    // Every score shown names its CVSS version, as in the report.
+    const scoreText = parsed ? `${score.toFixed(1)} (${parsed.version})` : null;
     const badge = mode === 'cvss' ? cvssBadge(score) : ratingBadge(f.rating);
-    const level = mode === 'cvss' ? (score === null ? labels.unscored : `${labels.cvss} ${score.toFixed(1)}`) : (f.rating || labels.unscored);
-    const band = [level, mode !== 'cvss' && mode.endsWith('cvss') && score !== null ? score.toFixed(1) : null].filter(Boolean).join(' · ');
+    const level = mode === 'cvss' ? (score === null ? labels.unscored : `${labels.cvss} ${scoreText}`) : (f.rating || labels.unscored);
+    const band = [level, mode !== 'cvss' && mode.endsWith('cvss') && score !== null ? scoreText : null].filter(Boolean).join(' · ');
     return h('div', { class: 'tag', 'data-testid': 'finding-tag' },
       h('span', { class: badge ? 'tag-band' : 'tag-band unrated', style: badge ? `background: #${badge.fill}; color: #${badge.textColor}` : null }, band),
       h('h1', { class: 'tag-id', 'data-testid': 'finding-id' }, displayId(f)),
@@ -2068,7 +2126,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     libraryHandle = null;
     libraryGen++;
     libraryLinks.clear();
-    say(`Opened the finding library "${file.name}" (${library.entries.length} entr${library.entries.length === 1 ? 'y' : 'ies'}).${r.openedVersion < LIBRARY_VERSION ? ' It is from an older version; saving writes the current library format, which older versions of the app cannot open.' : ''}`);
+    say(`Opened the finding library "${file.name}" (${library.entries.length} entr${library.entries.length === 1 ? 'y' : 'ies'}).${r.openedVersion < LIBRARY_VERSION ? ' It is from an older version. Saving writes library format 4, which Rootnote 0.1.x cannot open; keep your original file or save a copy.' : ''}`);
     renderNav();
     if (view === 'library') renderMain();
   }
@@ -2171,7 +2229,7 @@ ${e.title}`.toLowerCase().includes(q));
         };
         return h('div', { class: 'library-entry', dataset: { entry: entry.id } },
           h('span', { class: 'rdot', title: entry.rating || doc.project.labels.unscored, ...(badge ? { style: `background: #${badge.fill}`, 'data-rated': '1' } : {}) }),
-          h('div', { class: 'library-main' }, rename, h('span', { class: 'hint' }, entry.title || '(untitled)', entry.cvss ? ` · CVSS ${parseCvss31(entry.cvss).score.toFixed(1)}` : '')),
+          h('div', { class: 'library-main' }, rename, h('span', { class: 'hint' }, entry.title || '(untitled)', entry.cvss ? ` · CVSS ${parseCvss(entry.cvss).version} ${parseCvss(entry.cvss).score.toFixed(1)}` : '')),
           h('button', { type: 'button', 'data-testid': 'library-insert', onclick: () => insertFromLibrary(entry), disabled: doc.findings.length >= maxFindings }, 'Add to report'),
           h('button', { type: 'button', class: 'danger', onclick: remove, 'aria-label': `Delete ${entry.name}` }, 'Delete'));
       }) : [h('p', { class: 'hint' }, library.entries.length ? 'No entries match.' : 'The library is empty. Open a library file, or use "Save to library" on any finding.')]));
@@ -2582,7 +2640,7 @@ ${e.title}`.toLowerCase().includes(q));
   function takeFormatNotice() {
     if (!formatNotice) return '';
     formatNotice = false;
-    return ' It was saved in the current format, which older versions of the app cannot open.';
+    return ' It was saved in project format 7, which Rootnote 0.1.x cannot open.';
   }
 
   // savedBytes() relies on every toISOString() having the placeholder's length (years 0-9999).
@@ -2757,7 +2815,7 @@ Third-party software notices
     const cleaned = cleanedNote(result.cleanedImages);
     if (cleaned) markDirty();
     if (result.overBudgetBytes > 0) say(`Opened "${file.name}" (${counts}) and converted it from an older version. It is now over the 25 MB limit; see the notice above.${cleaned}`, 'error');
-    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}) and converted it from an older version. Saving writes the new format; keep the original file if older copies of the app still need it.${cleaned}`);
+    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}) and converted it from an older version. This version saves project format 7. Rootnote 0.1.x cannot open files saved by it, even when all findings use CVSS 3.1. Keep your original file or use Save as to save a copy.${cleaned}`);
     else say(`Opened "${file.name}" (${counts}).${cleaned}`, 'info', { fade: !cleaned });
     render();
     return true;

@@ -148,7 +148,7 @@ test('default text: manual ratings are a judgment, CVSS is calculated with the F
   for (const level of ['Critical', 'High', 'Medium', 'Low', 'Informational']) assert.match(sev, new RegExp(`^- ${level}: `, 'm'));
   const both = defaultRatingMethodText('risk+cvss', labels);
   assert.match(both, /Risk rating/);
-  assert.match(both, /CVSS score is the score calculated from the finding's CVSS version 3\.1 Base metrics/);
+  assert.match(both, /CVSS score is the score calculated from the finding's CVSS Base metrics, shown with its version and vector. A report can use CVSS 3.1 and CVSS 4.0 side by side/);
   assert.match(both, /- Critical: 9\.0 to 10\.0[\s\S]*- None: 0\.0/);
   assert.match(both, /shown as No score\./);
   assert.doesNotMatch(defaultRatingMethodText('cvss', labels), /judgment/);
