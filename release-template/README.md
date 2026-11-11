@@ -38,7 +38,7 @@ Engagements\
 
 choose **Or browse your engagement folders** on the start page (or **Engagements** in the side menu), then **Choose engagements folder…** and select the top folder. The app lists each customer and engagement with what its project holds (title, findings by rating, status) and the reports next to it.
 
-- **Open** opens that project. In Chrome and Edge, **Save** and the Word and CSV exports then write into the same engagement folder. If a file of that name is already there, the app asks before replacing it.
+- **Open** opens that project. In Chrome and Edge, **Save** and the Word, Markdown and CSV exports then write into the same engagement folder. If a file of that name is already there, the app asks before replacing it.
 - **New engagement…** creates `Customer\Engagement\` and asks every time whether to start an empty report there or save the open report there.
 - **Save open project here** saves the open project into an engagement folder.
 - Chrome and Edge ask once per session whether the page may edit files in that folder. The app shows what it is doing while your browser waits for the answer.
