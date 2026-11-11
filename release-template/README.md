@@ -17,7 +17,7 @@ The step-by-step guide is in `guide.html` in this folder (it works offline) and 
    - **Copy as text** in a finding's **⋯** menu copies the whole finding
 6. Give each screenshot a caption. Use **Black out or crop…** to hide anything sensitive (see *Screenshot editing*).
 7. **Save** (Ctrl+S) regularly. See *Saving and backups*.
-8. Open **Check & export**, review the reminders, choose A4 or Letter, and save the Word report. **Findings as CSV** gives the findings as a spreadsheet; **Print or save as PDF** prints the preview.
+8. Open **Check & export**, review the reminders, choose A4 or Letter, and save the Word report. **Findings as CSV** gives the findings as a spreadsheet; **Report as Markdown** gives the whole report as text; **Print or save as PDF** prints the preview.
 9. Open the .docx in Word, review it, and make your final edits there.
 
 On a window at least 1200 pixels wide, the **Live page** beside the editor shows the report page you are editing and highlights the part you are in. **Preview report** shows the whole report.
@@ -75,7 +75,7 @@ choose **Or browse your engagement folders** on the start page (or **Engagements
 - **Where files go.** In Chrome and Edge, **Save** asks where to save the first time and then saves to that same file; **⋯ → Save as…** picks a new file; **⋯ → Download project file** sends a copy to your downloads folder. A project opened from an engagement folder saves back into that folder. In browsers without a save picker, every save is a download of `<title>.rootnote.json`; check that the download finished.
 - **Google Drive, OneDrive, Dropbox.** If their desktop app syncs a folder on your computer, save into that folder; their software uploads the file. The tool itself never connects to them.
 - **Keep backups** of important projects in a second location.
-- **Project files, exported reports and CSV files contain your text, and the project and report contain your screenshots.** Treat them as confidential client material and store them according to your engagement's data-handling rules (for example an encrypted disk).
+- **Project files, exported reports, Markdown and CSV files contain your text, and the project and report contain your screenshots.** Treat them as confidential client material and store them according to your engagement's data-handling rules (for example an encrypted disk).
 - **Opening checks the file first.** **Open…** checks the whole file before replacing your current work. Damaged, incompatible, invalidly modified or too-large files are refused, and your current work is left unchanged. These are integrity and format checks, not a signature: a correctly formed project file that someone edited will still open.
 
 ## Limits
@@ -118,6 +118,10 @@ The app's messages round these limits to "2 MB" and "25 MB".
 
 **Findings as CSV** writes one row per finding: ID, title, rating, CVSS score and vector, status, vulnerability type, CWE, assets and the text sections. It is UTF-8 with a byte-order mark, so Excel shows accents correctly. Cells that a spreadsheet could run as a formula (starting with `=`, `+`, `-` or `@`, also after leading spaces, invisible or direction characters, or written with look-alike forms such as the minus sign or full-width characters) are prefixed with an apostrophe. Screenshots appear only as a placeholder with their ID and caption, for example `[Screenshot IMG-0003: Login response]`. Sections you hid in the report are left empty, and in CVSS-only reports the rating column is empty.
 
+## The Markdown file
+
+**Report as Markdown** writes the whole report as one UTF-8 Markdown file: the report sections in your order, a findings summary table, then each finding with the same ID, key facts and sections as the Word report. Hidden sections are left out. Text is escaped so it shows as typed, and code stays in fences. Screenshots are not included; each becomes a placeholder such as `*[Figure 3: Login response (screenshot not included)]*`. The table of contents and count tables are left out.
+
 ## Printing to PDF from the browser
 
 - **Turn off the browser's "Headers and footers" option** in the print window. When it is on, the browser itself prints the page address (for a downloaded copy, the file's location on your computer, which can include your user name) and the date on every sheet.
@@ -135,7 +139,7 @@ The app's messages round these limits to "2 MB" and "25 MB".
 
 | | Chrome, Edge | Firefox | Safari |
 |---|---|---|---|
-| Write, export Word and CSV, print | Yes | Yes | Writing, preview and Word export checked by hand; PDF printing not yet confirmed |
+| Write, export Word, Markdown and CSV, print | Yes | Yes | Writing, preview and Word export checked by hand; PDF printing not yet confirmed |
 | Save to the same file again | Yes | No: each save is a download | No: each save is a download |
 | Engagement folders | Read and save into them | Read only; saves are downloads | Not checked |
 

@@ -102,6 +102,14 @@ for (const [engine, port] of [['chrome', 9587], ['firefox', 9687]]) test(`engage
       assert.deepEqual(pinned, [52, 0], 'status under the header, nav right below it');
       const csv = await b.evaluate(`${csvName}.then((n) => window.__read('Brightwater Logistics/2026-10 Customer portal/' + n))`);
       assert.ok(csv.startsWith('"ID","Title","Severity"'), csv.slice(0, 40)); // text() drops the byte-order mark (unit-tested)
+      // The whole report as Markdown goes to the same folder, made from the open project.
+      await b.evaluate("document.querySelector('[data-testid=export-markdown]').click()");
+      const mdName = "window.__read('Brightwater Logistics/2026-10 Customer portal').then((n) => n.find((x) => x.endsWith('-report.md')))";
+      assert.ok(await b.waitFor(`${mdName}.then(Boolean)`, 10000));
+      const md = await b.evaluate(`${mdName}.then((n) => window.__read('Brightwater Logistics/2026-10 Customer portal/' + n))`);
+      assert.ok(md.startsWith('# Customer Portal Security Assessment\n'), md.slice(0, 60));
+      assert.match(md, /^## Findings$/m);
+      assert.doesNotMatch(md, /data:image/);
       await b.evaluate("document.querySelector('[data-testid=export-csv]').click()");
       assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
       assert.match(await b.evaluate("document.querySelector('dialog.confirm').textContent"), /Replace ".*-findings\.csv" in Brightwater Logistics › 2026-10 Customer portal\?/);

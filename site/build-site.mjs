@@ -129,7 +129,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
   <div><h2>Get the report out</h2><ul>
     <li>Real Word styles, table of contents, numbered figures, a linked findings summary; A4 or Letter.</li>
     <li>Your sections, order and names, up to 10 of your own; score by severity, risk or CVSS.</li>
-    <li>Findings as CSV for a spreadsheet or tracker.</li>
+    <li>Findings as CSV for a spreadsheet or tracker, or the whole report as Markdown.</li>
     <li>Check &amp; export lists what is still missing before you send.</li></ul></div>
   <div><h2>Keep engagements in order</h2><ul>
     <li>Point it at your Engagements folder: one folder per customer and engagement.</li>
@@ -165,7 +165,7 @@ const GUIDE_DESCRIPTIONS = {
   screenshots: 'Add screenshots to Rootnote findings by pasting or dropping them, caption them, black out secrets and handle tall captures.',
   'report-design': 'Design the Rootnote report: title, client and cover, logos, how findings are rated, and which sections appear in what order.',
   files: 'Rootnote project files: saving, one folder per engagement, cloud folders, recovery drafts, and what to do if a file will not open.',
-  export: 'Export a Rootnote report to Word, CSV or print/PDF, and solve common export and opening problems.',
+  export: 'Export a Rootnote report to Word, Markdown, CSV or print/PDF, and solve common export and opening problems.',
   reference: 'Rootnote reference: project limits, tested browsers, keyboard shortcuts and how to check your download.',
   glossary: 'Glossary of the terms used in Rootnote and its pentest reports.',
   readme: 'The full Rootnote README as one page: what it does, how to run it online or offline, privacy, and how to check your copy.',

@@ -7,9 +7,9 @@
 import { createReportPlan } from '../export-docx/plan.js';
 
 const ESCAPE = /[\\`*_[\]<>|#~]/g;
-const escapeMd = (s) => s.replace(ESCAPE, '\\$&');
+export const escapeMd = (s) => s.replace(ESCAPE, '\\$&');
 const longestRun = (s) => Math.max(0, ...(s.match(/`+/g) ?? []).map((r) => r.length));
-const codeSpan = (s) => {
+export const codeSpan = (s) => {
   const ticks = '`'.repeat(longestRun(s) + 1);
   const pad = s.startsWith('`') || s.endsWith('`') ? ' ' : '';
   return `${ticks}${pad}${s}${pad}${ticks}`;
@@ -22,7 +22,7 @@ const isBullet = (line) => /^- /.test(line);
 
 /** Text of a plain or code field, following the report's rules: a blank line starts a
  * paragraph and a line starting with "- " is a bullet. */
-function body(text, format, md) {
+export function body(text, format, md) {
   if (format === 'code') return md ? fence(text) : text;
   if (!md) return text.trim();
   return text.trim().split(/\n{2,}/).map((para) => {
@@ -45,13 +45,18 @@ function figureText(image, md, labels) {
 
 /** Markdown (default) or plain text for the finding at `index` of `project`. */
 export function findingText(project, index, { markdown = true } = {}) {
-  const md = markdown;
   const plan = createReportPlan(project);
   const f = plan.findings[index];
   if (!f) throw new Error(`no finding at ${index}`);
+  return findingBlock(plan, f, markdown, 2) + '\n';
+}
+
+/** One planned finding; `level` is the Markdown heading level of its title (sections go one deeper). */
+export function findingBlock(plan, f, md, level) {
   const out = [];
+  const hashes = '#'.repeat(level);
   const title = `${f.displayId} ${f.title || '(untitled)'}`;
-  out.push(md ? `## ${escapeMd(title)}` : `${title}\n${'='.repeat(Math.min(title.length, 72))}`);
+  out.push(md ? `${hashes} ${escapeMd(title)}` : `${title}\n${'='.repeat(Math.min(title.length, 72))}`);
 
   // Key facts as in the report; the status is always included, since a ticket needs it.
   const facts = f.keyFacts.filter((k) => k.key !== 'id');
@@ -81,7 +86,7 @@ export function findingText(project, index, { markdown = true } = {}) {
     }
     const content = parts.filter((p) => p.trim() !== '').join('\n\n');
     if (!content) continue;
-    out.push(md ? `### ${escapeMd(s.label)}` : `${s.label}\n${'-'.repeat(Math.min(s.label.length, 72))}`, content);
+    out.push(md ? `${hashes}# ${escapeMd(s.label)}` : `${s.label}\n${'-'.repeat(Math.min(s.label.length, 72))}`, content);
   }
-  return out.join('\n\n') + '\n';
+  return out.join('\n\n');
 }

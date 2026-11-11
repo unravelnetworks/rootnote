@@ -23,6 +23,7 @@ import { canPickSaveLocation, pickSaveFile, writeToHandle, saveErrorText } from 
 import { parseCvss31, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
 import { createReportPlan, resolveEngagementValue } from '../export-docx/plan.js';
 import { findingText } from '../app/finding-text.js';
+import { reportMarkdown } from '../app/report-markdown.js';
 import { defaultRatingMethodText } from '../app/rating-method.js';
 import { ratingBadge, cvssBadge } from '../export-docx/design.js';
 import { renderPreview } from './preview.js';
@@ -2218,6 +2219,7 @@ ${e.title}`.toLowerCase().includes(q));
           h('button', { type: 'button', class: 'big', 'data-testid': 'export', onclick: () => runExport(paper.value) }, icon('word'), engagement?.dir ? 'Save Word report' : canPickSaveLocation() ? 'Save Word report…' : 'Export Word report'),
           canPickSaveLocation() ? h('button', { type: 'button', class: 'secondary big', 'data-testid': 'export-download', onclick: () => runExport(paper.value, { download: true }) }, 'Download Word report') : null,
           h('button', { type: 'button', class: 'secondary big', 'data-testid': 'export-csv', onclick: exportCsv }, icon('file'), 'Findings as CSV'),
+          h('button', { type: 'button', class: 'secondary big', 'data-testid': 'export-markdown', onclick: exportMarkdown }, icon('file'), 'Report as Markdown'),
           h('button', { type: 'button', class: 'secondary big', 'data-testid': 'export-pdf', onclick: () => { if (setField(doc.project, 'paperSize', paper.value) || doc.project.paperSize === paper.value) printReport(); } }, icon('print'), 'Print or save as PDF')),
         h('p', { class: 'quiet' }, 'The file is made on this computer; the app uploads nothing. Open it in Word once to check page breaks before you send it.'),
         engagement?.dir ? h('p', { class: 'quiet', 'data-testid': 'export-target' }, `Saves into the engagement folder ${engagement.customer} › ${engagement.name}.`) : null,
@@ -2277,29 +2279,33 @@ ${e.title}`.toLowerCase().includes(q));
   }
 
   /** Findings as a spreadsheet: into the engagement folder, a chosen file or the downloads. */
-  async function exportCsv() {
-    const name = `${fileStem()}-findings.csv`;
-    const bytes = new TextEncoder().encode(findingsCsv(doc));
+  const exportCsv = () => exportTextFile({ kind: 'CSV', name: `${fileStem()}-findings.csv`, make: () => findingsCsv(doc),
+    description: 'Spreadsheet (CSV)', mime: 'text/csv', extension: '.csv', id: 'fieldnote-csv' });
+  /** The whole report as Markdown text; screenshots become placeholders. */
+  const exportMarkdown = () => exportTextFile({ kind: 'Markdown', name: `${fileStem()}-report.md`, make: () => reportMarkdown(doc),
+    description: 'Markdown text', mime: 'text/markdown', extension: '.md', id: 'rootnote-md' });
+  async function exportTextFile({ kind, name, make, description, mime, extension, id }) {
     const target = engagement?.dir ? engagement : null;
     if (exporting) return;
     exporting = true;
     try {
+      const bytes = new TextEncoder().encode(make());
       if (target) {
-        if (await writeIntoEngagement(target, name, bytes) === null) { say('CSV export cancelled. Nothing was written.'); return; }
+        if (await writeIntoEngagement(target, name, bytes) === null) { say(`${kind} export cancelled. Nothing was written.`); return; }
         say(`Saved "${name}" in ${target.customer} › ${target.name}.`);
         return;
       }
       if (canPickSaveLocation()) {
-        const handle = await pickSaveFile({ suggestedName: name, description: 'Spreadsheet (CSV)', mime: 'text/csv', extension: '.csv', id: 'fieldnote-csv', startIn: folderHint });
-        if (!handle) { say('CSV export cancelled. Nothing was written.'); return; }
+        const handle = await pickSaveFile({ suggestedName: name, description, mime, extension, id, startIn: folderHint });
+        if (!handle) { say(`${kind} export cancelled. Nothing was written.`); return; }
         await writeToHandle(handle, bytes);
         say(`Saved "${handle.name}".`);
         return;
       }
-      downloadBytes(bytes, name, 'text/csv');
+      downloadBytes(bytes, name, mime);
       say(`"${name}" sent to your browser's downloads. Check that the download finished.`);
     } catch (err) {
-      say(`The CSV file was not saved: ${engagementErrorText(err)}. Nothing was changed in your project.`, 'error');
+      say(`The ${kind} file was not saved: ${engagementErrorText(err)}. Nothing was changed in your project.`, 'error');
     } finally {
       exporting = false;
     }
