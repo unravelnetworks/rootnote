@@ -8,7 +8,7 @@ Every fact about another tool links to that project's own repository or document
 
 | Tool | Licence | How it runs | Collaboration | Report output | CVSS |
 |---|---|---|---|---|---|
-| Rootnote | Apache-2.0 | One HTML file in a desktop browser | None | Word, Markdown, CSV, print to PDF | 3.1 Base |
+| Rootnote | Apache-2.0 | One HTML file in a desktop browser | None | Word, Markdown, CSV, print to PDF | 3.1 and 4.0 Base |
 | SysReptor | SysReptor Community License (source-available) | Self-hosted or cloud | Live co-editing in the paid Professional edition | PDF | 3.1 and 4.0 |
 | PwnDoc | MIT | Self-hosted | Multi-user, real time | Word | 3 and 4 |
 | PwnDoc-ng | MIT | Self-hosted | Multi-user, co-editing | Word, own templates | 3.1 |
@@ -47,7 +47,6 @@ Every fact about another tool links to that project's own repository or document
 - Two or more people write the same report at once. Look at PwnDoc, PwnDoc-ng, Ghostwriter or SysReptor Professional.
 - You start from scanner output. Dradis CE imports it; Rootnote does not.
 - You must deliver in your own Word template. PwnDoc, Ghostwriter and AttackForge ReportGen fill templates you control. Rootnote has one built-in design with your sections, logos and colours.
-- You need CVSS 4.0 today. PwnDoc, PeTeReport and SysReptor support it. Rootnote supports CVSS 3.1 Base.
 - You want to manage clients and infrastructure, not just write the report. Look at Ghostwriter.
 - Your reports have more than 20 findings or 30 screenshots. Rootnote enforces those tested limits.
 
@@ -58,7 +57,7 @@ Every fact about another tool links to that project's own repository or document
 - The app processes your report on your own computer and does not upload it.
 - Works offline once downloaded.
 - Exports an editable Word report with styles, numbered figures and a linked findings summary, plus the whole report as Markdown and the findings as CSV.
-- CVSS 3.1 Base, CWE, affected assets and references for each finding.
+- CVSS 3.1 or 4.0 Base scores, CWE, affected assets and references for each finding. Each score shows its version.
 - Limits: 20 findings, 30 screenshots and a 25 MiB project file. These are the sizes we have tested.
 - Tested on Windows in Chrome, Edge and Firefox. Basic use in Safari on macOS has been checked by hand.
 - No independent security audit yet. The app runs no AI models.
