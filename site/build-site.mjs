@@ -150,7 +150,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <p><a href="/guide/">Read the guide</a> · <a href="/help-us-check/">Help us check what is not tested yet</a></p></div>
 </section>
 
-<section class="who"><h2>Who it's for</h2><p>Solo and freelance pentesters, and small teams, who deliver Word reports and don't want to run a reporting server or a template pipeline. Need collaboration and a shared finding database? A platform such as SysReptor, PwnDoc or Ghostwriter fits better.</p>
+<section class="who"><h2>Who it's for</h2><p>Solo and freelance pentesters, and small teams, who deliver Word reports and don't want to run a reporting server or a template pipeline. Need collaboration and a shared finding database? A platform such as SysReptor, PwnDoc or Ghostwriter fits better: <a href="/alternatives/">see how they compare</a>.</p>
 <p>Rootnote is free and open source under the <a href="/licence/">Apache License 2.0</a>, including for paid client work. <a href="https://github.com/unravelnetworks/rootnote">Read the source code</a>; open source means you can check it, not that it has been audited. The reports you create are yours. Built by <a href="https://unravelnetworks.com/">Unravel Networks</a>.</p></section>
 `, { wide: true, head: '\n' + jsonLd(LANDING_LD) }));
 
@@ -252,6 +252,9 @@ await writeFile(out + 'licence/index.html', page('/licence/', 'Rootnote licence'
 // Help us check: what is not tested yet, and where to send results.
 await mkdir(out + 'help-us-check', { recursive: true });
 await writeFile(out + 'help-us-check/index.html', page('/help-us-check/', 'Help us check Rootnote', markdown(await readFile(new URL('./help-us-check.md', import.meta.url), 'utf8')).html, { description: 'Help check Rootnote on setups we have not tested yet, such as Word for Mac, LibreOffice and Safari PDF, using only made-up data.' }));
+// Rootnote and the alternatives: a dated, sourced comparison (copy in site/alternatives.md).
+await mkdir(out + 'alternatives', { recursive: true });
+await writeFile(out + 'alternatives/index.html', page('/alternatives/', 'Rootnote and the alternatives: pentest reporting tools compared', markdown(await readFile(new URL('./alternatives.md', import.meta.url), 'utf8')).html, { description: 'How Rootnote compares with SysReptor, PwnDoc, Ghostwriter, Dradis and other pentest reporting tools: licences, hosting, output formats and CVSS, each sourced.' }));
 await writeFile(out + 'security/index.html', page('/security/', 'Rootnote security policy', markdown(await readFile(`${repo}SECURITY.md`, 'utf8')).html, { description: 'How to report a security issue in Rootnote privately, and what to expect after you report it.' }));
 await writeFile(out + '404.html', page('', 'Not found', '<h1>Page not found</h1><p><a href="/">Back to Rootnote</a></p>', { url: null }));
 
@@ -291,7 +294,7 @@ const block = (path, lines) => `${path}\n${lines.map((l) => `  ${l}`).join('\n')
 await writeFile(out + '_redirects', ['/help /guide/ 301', '/help/* /guide/:splat 301', ''].join('\n'));
 await writeFile(out + '_headers', [
   block('/*', [...common, `Content-Security-Policy: ${baselineCsp}`]),
-  ...['/', '/index.html', '/guide/*', '/help/*', '/privacy/*', '/licence/*', '/security/*', '/help-us-check/*', '/download/*', '/assets/*', '/404.html', '/site-manifest.json'].map((p) => block(p, [`Content-Security-Policy: ${siteCsp}`])),
+  ...['/', '/index.html', '/guide/*', '/help/*', '/privacy/*', '/licence/*', '/security/*', '/help-us-check/*', '/alternatives/*', '/download/*', '/assets/*', '/404.html', '/site-manifest.json'].map((p) => block(p, [`Content-Security-Policy: ${siteCsp}`])),
   block('/app/*', [`Content-Security-Policy: ${appCsp}; frame-ancestors 'none'`, 'Cache-Control: no-cache']),
   block('/download/*', ['Cache-Control: no-cache']),
 ].join('\n'));
