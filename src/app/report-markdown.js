@@ -22,9 +22,10 @@ const literalLines = (s) => s.trim().split('\n')
   .join('  \n');
 
 // A code row keeps every character in a fence under its label; other rows stay on the list line.
+// The fence is indented after each whole line break, so a CRLF pair is never split.
 function engagementRow(r) {
   const label = `- **${escapeMd(r.label)}:**`;
-  if (r.format === 'code') return `${label}\n\n${fence(r.value).replace(/^/gm, '  ')}\n`;
+  if (r.format === 'code') return `${label}\n\n${fence(r.value).replace(/(^|\r\n|\n|\r)/g, '$1  ')}\n`;
   return `${label} ${escapeMd(r.value).replace(/\n/g, '  \n  ')}`;
 }
 

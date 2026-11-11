@@ -98,3 +98,12 @@ test('a code engagement row keeps every character in a fence', () => {
   assert.equal(inner, row.value);
   assert.match(block, /`{5}/, 'fence longer than the four-backtick run inside');
 });
+
+test('a CRLF code engagement row gains no blank lines', () => {
+  const p = sample();
+  const row = p.project.engagement.rows.find((x) => x.source === 'custom');
+  Object.assign(row, { enabled: true, format: 'code', label: 'CRLF row', value: 'GET / HTTP/1.1\r\nHost: a.example\r\n\r\nbody' });
+  const md = reportMarkdown(p);
+  assert.ok(md.includes('  GET / HTTP/1.1\r\n  Host: a.example\r\n  \r\n  body'), JSON.stringify(md.slice(md.indexOf('CRLF row'), md.indexOf('CRLF row') + 120)));
+  assert.doesNotMatch(md, /\r {2}\n/);
+});
