@@ -645,7 +645,11 @@ button:disabled:not(.secondary):not(.ghost):not(.linkish) { background: var(--pa
 .facts textarea { width: calc(100% + 6px); margin-left: -6px; padding: 3px 5px; border-color: transparent; background: transparent; font-weight: 500; font-size: 13.5px; line-height: 1.45; resize: none; min-height: 0; }
 .facts textarea:hover { border-color: var(--line-strong); }
 .finding > .cvss-calc { margin: -2px 0 22px; padding: 0; border: 0; background: transparent; }
-.finding > .cvss-calc > summary { display: inline-block; font-weight: 500; font-size: 12.5px; color: var(--muted); }
+/* The calculator is a visible button: it holds the metrics and the CVSS version switch. */
+.finding > .cvss-calc > summary { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--fg); padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.finding > .cvss-calc > summary:hover { border-color: var(--fg); }
+.finding > .cvss-calc > summary .hint { font-weight: 400; }
+.finding > .cvss-calc[open] > summary { margin-bottom: 10px; }
 .finding > .cvss-calc[open] { padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); }
 .finding > .facts { margin-bottom: 8px; }
 .format-help { margin: 8px 0 0; }

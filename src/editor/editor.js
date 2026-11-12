@@ -1322,7 +1322,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       } },
       ...['3.1', '4.0'].map((v) => h('option', { value: v, selected: v === version }, `CVSS ${v}`)));
     const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator' },
-      h('summary', {}, `CVSS ${version} calculator`),
+      h('summary', {}, `CVSS ${version} calculator`, h('span', { class: 'hint' }, 'Pick the metrics, or switch this finding to CVSS 3.1 or 4.0')),
       h('label', { class: 'field' }, h('span', { class: 'label' }, 'CVSS version for this finding'), versionSelect),
       version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
       h('div', { class: 'cvss-grid' }, ...selects));

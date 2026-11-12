@@ -1,6 +1,6 @@
 {
   "app": "dist/rootnote.html",
-  "appSha256": "026cf706890b56bc1941a2b3f1c0451bb0db8eaac9b2b0454ed0c1c11542bbc9",
+  "appSha256": "8811e8e0d07ddb772a86a7726facd7f0031e9b6039ba5b5849acbb544823bc83",
   "viewport": "1280x1000@2",
   "theme": "light",
   "shots": [
@@ -61,8 +61,8 @@
     {
       "name": "facts",
       "steps": "first finding: tag, key facts and CVSS calculator; Severity marked 1, CVSS calculator marked 2",
-      "size": "589x363",
-      "sha256": "2a9104702c66ccad10f1659a0f5419b1eeb2054b0bcbc4311504efda50dd2e0c"
+      "size": "589x377",
+      "sha256": "a74b5213c653895b34cf1372953298616158a594e42ccf8d3da4db14e4868b1e"
     },
     {
       "name": "blocks",
