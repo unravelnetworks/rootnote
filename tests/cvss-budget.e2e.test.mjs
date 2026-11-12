@@ -1,5 +1,5 @@
 // A CVSS vector refused by the 25 MB budget is not left on screen as if it were stored: the box
-// and menus go back to the stored value and the note says it was not saved (Codex 148 R1).
+// and menus go back to the stored value and the note says it was not saved.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -102,8 +102,8 @@ test('a CVSS vector refused by the budget is not shown as stored', { skip: !inst
 });
 
 // Over the limit (recovery), Undo is not offered: clearing or replacing a pending finding's
-// old score asks first, and Cancel keeps it (Codex 157: a clear that ended recovery offered
-// an Undo that could not fit).
+// old score asks first, and Cancel keeps it (a clear that ended recovery used to offer an
+// Undo that could not fit).
 test('in recovery, clearing a pending score asks first and offers no Undo', { skip: !installed('chrome') && 'chrome not installed', timeout: 180000 }, async (t) => {
   const p = JSON.parse(nearLimitProject());
   p.findings[0].cvss = V31;
