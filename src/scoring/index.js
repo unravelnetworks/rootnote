@@ -59,12 +59,32 @@ export function cvssVersion(vector) {
  * only knew CVSS 3.1. Every finding is scored in this version. */
 export const reportCvssVersion = (doc) => doc?.project?.scoring?.cvssVersion ?? '3.1';
 
-/** The score label as shown: the authored label with its version number following the report
- * ("CVSS 3.1 Base" reads "CVSS 4.0 Base" in a 4.0 report), or the version added in brackets
- * when the label names none ("CVSS score (4.0)"). A stale label can never misstate the version. */
+/** Rootnote's own label wordings, which follow the report's version. */
+const DEFAULT_CVSS_LABEL = /^CVSS (3\.1|4\.0) Base$/;
+/** A label naming a CVSS version, as "CVSS 3.1", "CVSS v4.0" or "CVSSv3.1". */
+const NAMED_VERSION = /CVSS\s*v?(3\.1|4\.0)(?![\d.])/gi;
+
+/** The score label as shown. Rootnote's own wording follows the report ("CVSS 3.1 Base" reads
+ * "CVSS 4.0 Base" in a 4.0 report). Any other label is the author's text and is never
+ * rewritten: it is shown as written when it names the report's version, and otherwise with
+ * the version beside it ("Score (CVSS 4.0)"). A label naming another version is also flagged
+ * by staleCvssLabel. */
 export function cvssLabel(label, version) {
-  return /\b(3\.1|4\.0)\b/.test(label) ? label.replace(/\b(3\.1|4\.0)\b/g, version) : `${label} (${version})`;
+  if (DEFAULT_CVSS_LABEL.test(label)) return `CVSS ${version} Base`;
+  const named = [...label.matchAll(NAMED_VERSION)].map((m) => m[1]);
+  if (named.length && named.every((v) => v === version)) return label;
+  return /CVSS/i.test(label) && !named.length ? `${label} (${version})` : `${label} (CVSS ${version})`;
 }
+
+/** The version a custom CVSS label names when it is not the report's, or null. */
+export function staleCvssLabel(label, version) {
+  if (DEFAULT_CVSS_LABEL.test(label)) return null;
+  return [...label.matchAll(NAMED_VERSION)].map((m) => m[1]).find((v) => v !== version) ?? null;
+}
+
+/** For a report switching version: its label as stored afterwards. Only Rootnote's own
+ * wording changes; the author's text is kept. */
+export const switchedCvssLabel = (label, version) => (DEFAULT_CVSS_LABEL.test(label) ? `CVSS ${version} Base` : label);
 
 /** Findings whose stored vector is not in the report's CVSS version (for example inserted from
  * a library or kept from an older report). They must be rescored or cleared before a report
@@ -72,6 +92,15 @@ export function cvssLabel(label, version) {
 export function cvssMismatches(doc) {
   const version = reportCvssVersion(doc);
   return doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== version);
+}
+
+/** Why a report cannot be exported with CVSS scores, or null. `withCvss`: whether the output
+ * carries CVSS scores (the CSV always does; a report when its scoring mode shows CVSS). Every
+ * exporter checks this itself, so no route produces a report that mixes versions. */
+export function cvssExportProblem(doc, withCvss = doc.project.scoring.mode.includes('cvss')) {
+  const n = withCvss ? cvssMismatches(doc).length : 0;
+  if (!n) return null;
+  return `${n === 1 ? '1 finding is' : `${n} findings are`} scored in another CVSS version than this report's CVSS ${reportCvssVersion(doc)}. Rescore or clear ${n === 1 ? 'its score' : 'their scores'} first; Check & export lists ${n === 1 ? 'it' : 'them'}.`;
 }
 
 /** A CVSS 3.1 or 4.0 Base vector, by its prefix: { version, vector, metrics, score }. Callers
@@ -114,7 +143,10 @@ export function ratingCounts(doc) {
       if (f.rating !== null && !['Critical', 'High', 'Medium', 'Low', 'Informational'].includes(f.rating)) throw new Error('Invalid finding rating.');
       return f.rating;
     }));
-  if (mode.includes('cvss')) distributions.push(distribution('cvss', cvssLabel(labels.cvss, reportCvssVersion(doc)),
+  // CVSS counts never mix versions: while a finding is scored in another version than the
+  // report's, the counts are withheld (cvssWithheld says how many findings) instead of shown.
+  const mismatched = mode.includes('cvss') ? cvssMismatches(doc).length : 0;
+  if (mode.includes('cvss') && !mismatched) distributions.push(distribution('cvss', cvssLabel(labels.cvss, reportCvssVersion(doc)),
     ['Critical', 'High', 'Medium', 'Low', 'None'], f => f.cvss === null ? null : cvssBand(parseCvss(f.cvss).score)));
-  return { mode, total, distributions };
+  return { mode, total, distributions, ...(mismatched ? { cvssWithheld: mismatched } : {}) };
 }

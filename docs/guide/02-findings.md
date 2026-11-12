@@ -16,7 +16,9 @@ At the top of a finding:
 
 ![A finding's key facts: Severity marked 1 and the CVSS calculator marked 2.](__IMG_FACTS__)
 
-Rootnote calculates Base scores only: CVSS 3.1 Base, or CVSS 4.0 Base (also called CVSS-B), which leaves out Threat, Environmental and Supplemental metrics. A report uses one CVSS version for every finding, named in the score label. Rootnote never converts scores between versions. A finding scored in the other version (for example from your finding library) is marked; rescore it or clear it before you export. You choose the metrics and the severity; it does not choose them for you.
+Rootnote calculates Base scores only: CVSS 3.1 Base, or CVSS 4.0 Base (also called CVSS-B), which leaves out Threat, Environmental and Supplemental metrics. A report uses one CVSS version for every finding, named in the score label. Rootnote does not convert scores between versions.
+
+A finding scored in the other version (for example from your finding library) is marked. Rescore it or clear its score: until then, exports that show CVSS scores, and Findings as CSV, are blocked. You choose the metrics and the severity; it does not choose them for you.
 
 If the report shows CVSS scores and a finding has no vector, the report says *Unscored* for it. That is different from a score of zero.
 

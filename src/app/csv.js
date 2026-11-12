@@ -6,7 +6,7 @@
 // hidden in the report are left empty.
 // UTF-8 with a byte-order mark and CRLF line ends, which Excel reads correctly.
 import { resolveFindingPrefix } from './project.js';
-import { parseCvss, cvssLabel, reportCvssVersion, formatFindingStatus } from '../scoring/index.js';
+import { parseCvss, cvssLabel, cvssExportProblem, reportCvssVersion, formatFindingStatus } from '../scoring/index.js';
 
 // Also after leading spaces or invisible characters, and full-width look-alikes, since some
 // spreadsheet imports trim or fold them, including direction marks,
@@ -22,6 +22,8 @@ export function csvCell(value) {
 
 /** The whole file as text (with the byte-order mark), for the project `doc`. */
 export function findingsCsv(doc) {
+  const problem = cvssExportProblem(doc, true);
+  if (problem) throw new Error(problem);
   const p = doc.project;
   const labels = p.labels;
   const label = (key) => p.sections.finding.find((s) => s.key === key)?.label ?? key;

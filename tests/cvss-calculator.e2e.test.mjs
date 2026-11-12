@@ -110,8 +110,8 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate(setReport('4.0'));
       assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
       const text = await b.evaluate("document.querySelector('dialog.confirm').textContent");
-      assert.match(text, /Use CVSS 4\.0 for this report\? 1 finding has a score in another CVSS version\. It is deleted, because Rootnote cannot convert scores between versions/);
-      assert.match(text, /You can undo this right after/);
+      assert.match(text, /Use CVSS 4\.0 for this report\? 1 finding has a CVSS 3\.1 score\. Its CVSS score will be deleted; the finding and its other content will be kept\. Rootnote does not convert scores between versions/);
+      assert.match(text, /Undo is available right after, until your next edit/);
       await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
       assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
       assert.equal(await b.evaluate(`${snap}.project.scoring.cvssVersion`), '3.1');

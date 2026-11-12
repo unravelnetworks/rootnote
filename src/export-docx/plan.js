@@ -239,6 +239,9 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       values: { id: f.displayId, title: f.title, ...Object.fromEntries(f.scoring.map(s => [s.key, s.value])),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?{status:f.status.label}:{}),...(classifyColumn?{classification:classified(f)}:{}) } })),
     ...(v4?{statusCounts:summaryEnabled&&p.findingStatusDisplay.counts?findingStatusCounts(project):null,
       statusNote:summaryEnabled&&(p.findingStatusDisplay.summaryColumn||p.findingStatusDisplay.counts)?'Counts include every finding in this report, whatever its status.':null}:{}) };
+  // Shown in the preview while CVSS counts are withheld (exports are refused in that state).
+  const withheld=summary.ratingCounts.cvssWithheld;
+  summary.cvssCountsNote=summaryEnabled&&withheld?`${labels.cvss} counts are not shown: ${withheld===1?'1 finding is':`${withheld} findings are`} scored in another CVSS version. Rescore or clear ${withheld===1?'its score':'their scores'} to show them.`:null;
   Object.assign(summary,summaryGeometry(summary.columns,summary.rows,geometry,design));
   summary.countTables=summaryEnabled?horizontalCounts(summary):[];
   let reportSections = reportConfigs.filter(s => s.enabled).flatMap(s => {

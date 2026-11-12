@@ -108,29 +108,70 @@ test('the label names the report version; only a score in the other version name
   const four = createReportPlan(d);
   assert.equal(four.summary.columns.find((c) => c.key === 'cvss').label, 'CVSS 4.0 Base');
   assert.deepEqual(four.summary.rows.map((r) => r.values.cvss), ['9.8 (3.1)', '9.3', d.project.labels.unscored]);
-  d.project.labels.cvss = 'Score';
-  assert.equal(createReportPlan(d).summary.columns.find((c) => c.key === 'cvss').label, 'Score (4.0)');
   d.project.labels.cvss = 'CVSS 3.1 Base';
   d.project.scoring.cvssVersion = '3.1';
-  const bands = ratingCounts(d).distributions.find((x) => x.key === 'cvss').rows;
-  assert.deepEqual(Object.fromEntries(bands.map((r) => [r.key, r.count])), { Critical: 2, High: 0, Medium: 0, Low: 0, None: 0, unscored: 1 });
   // A 4.0 vector with no impact is 0.0 (None), still distinct from unscored.
   d.findings[1].cvss = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N';
   assert.equal(createReportPlan(d).findings[1].scoring.find((s) => s.key === 'cvss').value, '0.0 (4.0)', 'mismatched: named');
-  assert.equal(ratingCounts(d).distributions.find((x) => x.key === 'cvss').rows.find((r) => r.key === 'None').count, 1);
+});
+
+test('only the default label follows the report; a custom label is kept and the version shown beside it', async () => {
+  const { cvssLabel, staleCvssLabel, switchedCvssLabel } = await import('../src/scoring/index.js');
+  assert.equal(cvssLabel('CVSS 3.1 Base', '4.0'), 'CVSS 4.0 Base');
+  assert.equal(cvssLabel('Client methodology 3.1', '4.0'), 'Client methodology 3.1 (CVSS 4.0)', 'other numbers are never rewritten');
+  assert.equal(switchedCvssLabel('Client methodology 3.1', '4.0'), 'Client methodology 3.1');
+  assert.equal(cvssLabel('CVSS v3.1', '4.0'), 'CVSS v3.1 (CVSS 4.0)');
+  assert.equal(staleCvssLabel('CVSS v3.1', '4.0'), '3.1', 'a custom label naming another version is flagged');
+  assert.equal(staleCvssLabel('CVSSv4.0 score', '4.0'), null);
+  assert.equal(cvssLabel('CVSS v4.0', '4.0'), 'CVSS v4.0');
+  assert.equal(cvssLabel('CVSS Base', '4.0'), 'CVSS Base (4.0)');
+  assert.equal(cvssLabel('Score', '4.0'), 'Score (CVSS 4.0)');
+  const d = mixed();
+  d.findings[1].cvss = null;
+  d.project.labels.cvss = 'CVSS v3.1';
+  d.project.scoring.cvssVersion = '4.0';
+  d.findings[0].cvss = null;
+  const { checklist } = await import('../src/editor/checklist.js');
+  assert.ok(checklist(d).some((w) => /The CVSS label "CVSS v3\.1" names CVSS 3\.1, but this report uses CVSS 4\.0/.test(w.text)));
+});
+
+test('CVSS counts never mix versions: withheld with a note while a finding is in the other version', () => {
+  const d = mixed();
+  Object.assign(d.project.findingStatusDisplay, { counts: true });
+  const counts = ratingCounts(d);
+  assert.equal(counts.distributions.some((x) => x.key === 'cvss'), false);
+  assert.equal(counts.cvssWithheld, 1);
+  assert.ok(counts.distributions.some((x) => x.key === 'rating'), 'severity counts stay');
+  assert.match(createReportPlan(d).summary.cvssCountsNote, /CVSS 3\.1 Base counts are not shown: 1 finding is scored in another CVSS version/);
+  d.findings[1].cvss = null;
+  const bands = ratingCounts(d).distributions.find((x) => x.key === 'cvss').rows;
+  assert.deepEqual(Object.fromEntries(bands.map((r) => [r.key, r.count])), { Critical: 1, High: 0, Medium: 0, Low: 0, None: 0, unscored: 2 });
+  assert.equal(createReportPlan(d).summary.cvssCountsNote, null);
+});
+
+test('every exporter refuses a report mixing CVSS versions; CSV even when CVSS is hidden', async () => {
+  const { exportDocx } = await import('../src/export-docx/index.js');
+  const d = mixed();
+  const refused = /1 finding is scored in another CVSS version than this report's CVSS 3\.1/;
+  assert.throws(() => findingsCsv(d), refused);
+  assert.throws(() => reportMarkdown(d), refused);
+  await assert.rejects(exportDocx(d, { paperSize: 'A4' }), refused);
+  d.project.scoring.mode = 'severity';
+  assert.throws(() => findingsCsv(d), refused, 'the CSV always holds CVSS scores');
+  assert.doesNotThrow(() => reportMarkdown(d), 'CVSS hidden: the report is allowed');
 });
 
 test('CSV keeps a numeric score beside the version-bearing vector; copied text names the version', async () => {
   const { findingText } = await import('../src/app/finding-text.js');
   const d = mixed('cvss');
+  d.project.scoring.cvssVersion = '4.0';
+  d.findings[0].cvss = null;
   const csv = findingsCsv(d);
-  assert.match(csv, /"CVSS 3\.1 Base score","CVSS 3\.1 Base vector"/);
+  assert.match(csv, /"CVSS 4\.0 Base score","CVSS 4\.0 Base vector"/);
   assert.match(csv, /"9\.3","CVSS:4\.0\/AV:N/);
-  assert.match(csv, /"9\.8","CVSS:3\.1\/AV:N/);
   const md = reportMarkdown(d);
-  assert.match(md, /\*\*CVSS 3\.1 Base:\*\* 9\.8 \(/);
-  assert.match(md, /9\.3 \(4\.0\)/);
-  assert.match(findingText(d, 0), /\*\*CVSS 3\.1 Base:\*\* 9\.8 \(3\.1\)/);
+  assert.match(md, /\*\*CVSS 4\.0 Base:\*\* 9\.3 \(/);
+  assert.match(findingText(d, 1), /\*\*CVSS 4\.0 Base:\*\* 9\.3 \(4\.0\)/);
 });
 
 test('New from settings keeps the CVSS version choice, never findings or vectors', () => {
@@ -152,7 +193,7 @@ test('every display option works on a v7 project: status counts and column, clas
   assert.equal(plan.reportSections[0].kind, 'contents');
 });
 
-test('a project holding a mismatched 4.0 vector saves and reopens unchanged; Word names it on A4 and Letter', async () => {
+test('a project holding a mismatched 4.0 vector saves and reopens unchanged; once rescored, Word exports on A4 and Letter', async () => {
   const { default: JSZip } = await import('jszip');
   const { exportDocx } = await import('../src/export-docx/index.js');
   const d = mixed();
@@ -165,12 +206,13 @@ test('a project holding a mismatched 4.0 vector saves and reopens unchanged; Wor
   assert.equal(r.ok, true, r.errors?.join('; '));
   assert.equal(r.migratedFrom, null);
   assert.deepEqual(r.project, d, 'nothing changes on reopen');
+  r.project.findings[1].cvss = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N';
   for (const paperSize of ['A4', 'Letter']) {
     const xml = await (await JSZip.loadAsync(await exportDocx(r.project, { paperSize }))).file('word/document.xml').async('string');
     assert.match(xml, />9\.8</, paperSize);
-    assert.match(xml, /9\.3 \(4\.0\)/, `${paperSize}: a mismatched score names its version`);
+    assert.match(xml, />6\.1</, paperSize);
+    assert.doesNotMatch(xml, /\((3\.1|4\.0)\)/, `${paperSize}: matching scores are plain`);
     assert.match(xml, /CVSS 3\.1 Base/, paperSize);
-    assert.match(xml, /CVSS:4\.0\/AV:N\/AC:L\/AT:N/, `${paperSize}: the vector is kept as stored`);
   }
 });
 

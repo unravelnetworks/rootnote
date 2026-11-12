@@ -20,7 +20,7 @@ import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem 
 import { findingsCsv } from '../app/csv.js';
 import { checklist } from './checklist.js';
 import { canPickSaveLocation, pickSaveFile, writeToHandle, saveErrorText } from './save.js';
-import { parseCvss, cvssVersion, cvssLabel, cvssMismatches, reportCvssVersion, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
+import { parseCvss, cvssVersion, cvssLabel, cvssExportProblem, switchedCvssLabel, reportCvssVersion, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
 import { createReportPlan, resolveEngagementValue } from '../export-docx/plan.js';
 import { findingText } from '../app/finding-text.js';
 import { reportMarkdown } from '../app/report-markdown.js';
@@ -1057,7 +1057,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         'Shown in the findings summary and in each finding. Risk is the rating you assign; it is not calculated. Values you hide stay saved.'),
         field('This report uses', h('select', { 'data-testid': 'cvss-report-version', onchange: (e) => switchCvssVersion(e.target) },
           ...['3.1', '4.0'].map((v) => h('option', { value: v, selected: p.scoring.cvssVersion === v }, `CVSS ${v} Base`))),
-        'Every finding is scored in this version. Changing it removes scores in the other version, after asking; Rootnote cannot convert them, so you choose the new metrics for each finding.'),
+        'Every finding is scored in this version. Changing it deletes the CVSS scores in the other version, after asking; the findings are kept. Rootnote does not convert scores, so you rescore those findings.'),
         h('div', { class: 'field' }, checkbox(p, 'backToSummaryLinks', 'Add a link back to the findings summary under each finding')))),
       card('Finding status in the report', h('div', { class: 'field', 'data-testid': 'status-display' },
         checkbox(p.findingStatusDisplay, 'keyFacts', 'Show the status in each finding\'s key facts'),
@@ -1154,12 +1154,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
 
   // Print / Save as PDF: the browser prints the preview pages, one page box per sheet at
   // the report's paper size. Pagination follows the preview, not Word.
-  /** Why an export must wait: CVSS scores in another version than the report's. `withCvss`
+  /** Why an export is refused: CVSS scores in another version than the report's. `withCvss`
    * is whether the output carries CVSS scores (always for the CSV). */
-  function cvssExportBlock(withCvss = doc.project.scoring.mode.endsWith('cvss')) {
-    const n = withCvss ? cvssMismatches(doc).length : 0;
-    return n ? `${n === 1 ? '1 finding is' : `${n} findings are`} scored in another CVSS version than this report's CVSS ${reportCvssVersion(doc)}. Rescore or clear ${n === 1 ? 'it' : 'them'} first; Check & export lists ${n === 1 ? 'it' : 'them'}.` : null;
-  }
+  const cvssExportBlock = (withCvss) => cvssExportProblem(doc, withCvss);
 
   async function printReport() {
     if (recovery) { say('Printing is not available while the project is over the 25 MB limit.', 'error'); return; }
@@ -1352,21 +1349,21 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const lose = doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== next);
     const undoable = undoAvailable();
     if (lose.length) {
-      const n = lose.length === 1 ? '1 finding has a score' : `${lose.length} findings have scores`;
-      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${n} in another CVSS version. ${lose.length === 1 ? 'It is' : 'They are'} deleted, because Rootnote cannot convert scores between versions; you choose the CVSS ${next} metrics for each finding. ${undoable ? 'You can undo this right after.' : 'This cannot be undone while the project is over the size limit.'}`, `Use CVSS ${next}`);
+      const one = lose.length === 1;
+      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${one ? `1 finding has a CVSS ${from} score. Its CVSS score will be deleted; the finding and its other content will be kept.` : `${lose.length} findings have CVSS ${from} scores. Their CVSS scores will be deleted; the findings and their other content will be kept.`} Rootnote does not convert scores between versions. Choose the CVSS ${next} metrics to rescore ${one ? 'it' : 'them'}. ${undoable ? 'Undo is available right after, until your next edit.' : 'This cannot be undone while the project is over the size limit.'}`, `Use CVSS ${next}`);
       if (!ok || generation !== before.gen || revision !== before.rev || doc !== before.doc) { select.value = from; return; }
     }
     const saved = lose.map((f) => [f, f.cvss]);
     const label = p.labels.cvss;
-    const newLabel = /\b(3\.1|4\.0)\b/.test(label) ? label.replace(/\b(3\.1|4\.0)\b/g, next) : label;
+    const newLabel = switchedCvssLabel(label, next);
     const apply = () => { p.scoring.cvssVersion = next; p.labels.cvss = newLabel; for (const [f] of saved) f.cvss = null; };
     const revert = () => { p.scoring.cvssVersion = from; p.labels.cvss = label; for (const [f, v] of saved) f.cvss = v; };
     if (!change(apply, revert)) { select.value = from; return; }
     renderNav();
     render();
-    say(`This report now uses CVSS ${next}.${saved.length ? ` ${saved.length} score${saved.length === 1 ? '' : 's'} removed; rescore ${saved.length === 1 ? 'that finding' : 'those findings'} with the calculator.` : ''}`);
+    say(`This report now uses CVSS ${next}.${saved.length ? ` ${saved.length} CVSS score${saved.length === 1 ? '' : 's'} deleted; rescore ${saved.length === 1 ? 'that finding' : 'those findings'} with the calculator.` : ''}`);
     if (saved.length && undoable) {
-      offerUndo(`Switched the report to CVSS ${next} and removed ${saved.length} score${saved.length === 1 ? '' : 's'}.`,
+      offerUndo(`Switched the report to CVSS ${next} and deleted ${saved.length} CVSS score${saved.length === 1 ? '' : 's'}.`,
         () => (change(revert, apply) ? true : BUDGET_REASON), () => { renderNav(); render(); say(`This report uses CVSS ${from} again; the scores are back.`); });
     }
   }

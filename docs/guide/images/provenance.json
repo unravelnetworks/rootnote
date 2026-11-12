@@ -1,6 +1,6 @@
 {
   "app": "dist/rootnote.html",
-  "appSha256": "1301e05afb582c909691b3f90385e89fc36ffbf678b886f829a9faa1fa35f816",
+  "appSha256": "c35ddd9be2319584c11227816edd41c8b4cb7858a55121369539e768a11c6b31",
   "viewport": "1280x1000@2",
   "theme": "light",
   "shots": [
@@ -97,8 +97,8 @@
     {
       "name": "sections",
       "steps": "Sections & scoring: Scoring choice marked 1, This report uses (CVSS version) marked 2",
-      "size": "758x145",
-      "sha256": "5ca1246bfd9e4e3504f8478d1a753b71825c1f8a8322714fc575b0ec54820120"
+      "size": "758x164",
+      "sha256": "790ddef5353b56975aa7acf5ff5519587dd564447f37dd654ab3590301918510"
     },
     {
       "name": "section-list",

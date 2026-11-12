@@ -257,6 +257,10 @@ input.mono { font: 13px/1.4 Consolas, "Cascadia Mono", monospace; }
 .nav li.sortable { display: flex; align-items: center; }
 .nav li.sortable > .navitem { flex: 1; min-width: 0; }
 
+/* A report mixing CVSS versions: on screen the pages stay visible for correcting; printed,
+   only the notice (preview.js). */
+.pv-print-block { display: none; }
+
 /* Print / Save as PDF: only the preview page boxes, one per sheet, at their exact size. */
 @media print {
   html, body { background: #fff !important; }
@@ -267,6 +271,8 @@ input.mono { font: 13px/1.4 Consolas, "Cascadia Mono", monospace; }
      after a full page gave Safari a blank sheet after every page). */
   .pv-pages > * + * { break-before: page; }
   .pv-overflow { outline: none !important; }
+  [data-print-blocked] .pv-pages { display: none !important; }
+  [data-print-blocked] .pv-print-block { display: block !important; padding: 20mm; font: 12pt/1.5 sans-serif; color: #000; }
   /* Gecko only. Print the plain-text twin, not the link (see internalLink in preview.js).
      No ligatures: in Firefox's PDF a ligature such as "ti" gets a broken text mapping, so
      the word looks right but copies and searches wrongly (for example "Informa?on"). */

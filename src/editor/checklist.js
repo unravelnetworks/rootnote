@@ -4,7 +4,7 @@
 // or a finding id.
 import { resolveFindingPrefix, screenshotRefs } from '../app/project.js';
 import { countPrompts } from '../app/starter-library.js';
-import { cvssVersion, reportCvssVersion } from '../scoring/index.js';
+import { cvssVersion, reportCvssVersion, staleCvssLabel } from '../scoring/index.js';
 
 const PLACEHOLDER = /\b(TODO|TBD|FIXME|lorem ipsum|XXX)\b|\[(insert|placeholder)[^\]]*\]/i;
 
@@ -31,6 +31,11 @@ export function checklist(doc) {
   scan('Details & cover', 'details', [p.title, p.subtitle, p.client, p.scope, p.executiveSummary, p.ratingMethod?.text,
     ...(p.customSections ?? []).flatMap((c) => [c.title, c.text]),
     ...p.engagement.rows.map((r) => `${r.label}\n${r.value || ''}`)].join('\n'));
+
+  // A custom CVSS label naming another version than the report's: shown with the report's
+  // version beside it, never rewritten; the author decides.
+  const stale = mode.includes('cvss') ? staleCvssLabel(p.labels.cvss, reportCvssVersion(doc)) : null;
+  if (stale) warnings.push({ where: 'Sections & scoring', go: 'layout', text: `The CVSS label "${p.labels.cvss}" names CVSS ${stale}, but this report uses CVSS ${reportCvssVersion(doc)}. The report shows the label with CVSS ${reportCvssVersion(doc)} beside it; edit the label if that reads wrong.` });
 
   const prefix = resolveFindingPrefix(p);
   const label = (key) => p.sections.finding.find((s) => s.key === key).label;

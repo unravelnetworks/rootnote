@@ -60,12 +60,32 @@ for (const [engine, port] of [['chrome', 9543], ['firefox', 9643]]) test(`mixed 
       }
     });
 
+    await t.test('the preview withholds CVSS counts, and no print route shows the report', async () => {
+      await b.evaluate("document.querySelector('[data-testid=top-preview]').click()");
+      assert.ok(await b.waitFor("!!document.querySelector('[data-testid=preview] .pv-page')"));
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-counts-withheld]').textContent"), /counts are not shown: 1 finding is scored in another CVSS version/);
+      assert.equal(await b.evaluate("!!document.querySelector('[data-distribution=cvss]')"), false, 'no blended CVSS count table');
+      assert.equal(await b.evaluate("getComputedStyle(document.querySelector('[data-testid=print-block]')).display"), 'none', 'on screen the pages stay for correcting');
+      if (engine === 'chrome') {
+        // Ctrl+P and the browser menu print the page with print media; only the notice shows.
+        await b.send('Emulation.setEmulatedMedia', { media: 'print' });
+        try {
+          assert.equal(await b.evaluate("getComputedStyle(document.querySelector('.pv-pages')).display"), 'none');
+          assert.equal(await b.evaluate("getComputedStyle(document.querySelector('[data-testid=print-block]')).display"), 'block');
+          assert.match(await b.evaluate("document.querySelector('[data-testid=print-block]').textContent"), /This report was not printed/);
+        } finally { await b.send('Emulation.setEmulatedMedia', { media: '' }); }
+      }
+    });
+
     await t.test('rescoring in the report version clears the block', async () => {
       await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[1].click()");
       await b.evaluate(`(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = ${JSON.stringify(V31)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       assert.equal(await b.evaluate(`${snap}.findings[1].cvss`), V31);
       await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent.includes('Check & export')).click()");
       assert.notEqual(await b.evaluate("document.querySelector('[data-testid=review-state]').textContent"), 'Cannot export yet');
+      await b.evaluate("document.querySelector('[data-testid=top-preview]').click()");
+      assert.ok(await b.waitFor("!!document.querySelector('[data-distribution=cvss]')"), 'CVSS counts are back');
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=preview]').hasAttribute('data-print-blocked')"), false);
     });
     assert.deepEqual(b.errors, [], 'page errors or CSP violations');
     assert.deepEqual(b.requests, [], 'network requests');
