@@ -1236,7 +1236,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const rating = h('select', { 'data-testid': 'rating', onchange: (e) => { if (!setField(f, 'rating', e.target.value || null)) e.target.value = f.rating || ''; else renderNav(); } },
       h('option', { value: '', selected: f.rating === null }, labels.unscored),
       ...SEVERITIES.map((s) => h('option', { value: s, selected: f.rating === s }, s)));
-    const cvssNote = h('span', { class: 'hint', 'data-testid': 'cvss-note' });
+    const cvssNote = h('span', { class: 'hint', id: 'cvss-note', 'data-testid': 'cvss-note' });
     // The report uses one CVSS version (Sections & scoring); every calculator follows it. A
     // stored vector in the other version is kept, shown with its own version, and must be
     // rescored or cleared before a report with CVSS scores is exported.
@@ -1248,7 +1248,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     // incomplete calculator (the stored vector stays until every metric is chosen).
     let typedError = null;
     const stored = () => {
-      if (!f.cvss) return 'Empty means not scored.';
+      if (!f.cvss) return `Not scored. Open the CVSS ${version} calculator and pick every metric, or paste a CVSS ${version} vector.`;
       const parsed = parseCvss(f.cvss);
       return mismatch()
         ? `Stored: score ${parsed.score.toFixed(1)} in CVSS ${parsed.version}, but this report uses CVSS ${version}. Rescore it with the calculator below, or clear it, before you export.`
@@ -1265,7 +1265,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     };
     showCvssNote(null);
     const cvss = h('input', {
-      type: 'text', class: 'mono', value: f.cvss || '', maxlength: 64, spellcheck: 'false', 'data-testid': 'cvss', placeholder: CVSS_EXAMPLE[version],
+      type: 'text', class: 'mono', value: f.cvss || '', maxlength: 64, spellcheck: 'false', 'data-testid': 'cvss', placeholder: 'Not scored', 'aria-describedby': 'cvss-note',
       oninput: (e) => {
         const v = e.target.value.trim();
         if (v === '') { if (setField(f, 'cvss', null)) { showCvssNote(null); syncCalculator(); renderNav(); } return; }
@@ -1313,7 +1313,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       metricsFor.forEach(([key], i) => { picked[key] = m[key]; selects[i].querySelector('select').value = m[key] ?? ''; });
     }
     const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator', open: mismatch() },
-      h('summary', {}, `CVSS ${version} calculator`, h('span', { class: 'hint' }, mismatch() ? `Rescore this finding in CVSS ${version}` : 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring')),
+      h('summary', {}, `CVSS ${version} calculator`, h('span', { class: 'hint', 'data-testid': 'cvss-calc-hint' }, mismatch() ? `Rescore this finding in CVSS ${version}` : f.cvss ? 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring' : 'Not scored yet: pick the metrics to score this finding')),
       version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
       h('div', { class: 'cvss-grid' }, ...selects));
     return [

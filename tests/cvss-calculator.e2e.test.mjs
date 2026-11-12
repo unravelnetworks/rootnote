@@ -131,6 +131,10 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       assert.ok(await b.waitFor("!!document.querySelector('[data-testid=cvss-AT]')"));
       assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-S]')"), false, 'no 3.1 Scope menu');
       assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-calculator] summary').textContent"), /CVSS 4\.0 calculator/);
+      // An empty box must not look like a score: no example vector as its placeholder.
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss]').placeholder"), 'Not scored');
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-calc-hint]').textContent"), /Not scored yet/);
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /^Not scored\. Open the CVSS 4\.0 calculator/);
       await b.evaluate("document.querySelector('[data-testid=undo]').click()");
       assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '3.1'`));
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31, 'Undo restores the removed score');

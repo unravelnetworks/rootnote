@@ -81,7 +81,7 @@ test('a CVSS vector refused by the budget is not shown as stored', { skip: !inst
       assert.equal(s.stored, null);
       assert.equal(s.input, '', 'the box shows what Save writes');
       assert.equal(s.kind, 'error');
-      assert.match(s.note, /Not saved: the project is at its size limit\. Empty means not scored\./);
+      assert.match(s.note, /Not saved: the project is at its size limit\. Not scored\./);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-AV]').value"), '', 'menus stay empty');
     });
 
