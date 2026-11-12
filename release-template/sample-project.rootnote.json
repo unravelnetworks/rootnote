@@ -1,6 +1,6 @@
 {
   "format": "fieldnote-project",
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "createdAt": "2026-10-28T09:00:00.000Z",
   "savedAt": "2026-10-28T09:00:00.000Z",
   "project": {
@@ -26,7 +26,8 @@
       "enabled": true
     },
     "scoring": {
-      "mode": "severity+cvss"
+      "mode": "severity+cvss",
+      "cvssVersion": "3.1"
     },
     "engagement": {
       "rows": [

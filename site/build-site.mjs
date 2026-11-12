@@ -140,7 +140,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     ${fp}
   </div>
   <figure class="proof">
-    <img src="/assets/sample-summary.png" width="784" height="1123" alt="Findings summary page of a sample Word report made with Rootnote: eight findings with risk, CVSS score, status and CWE classification, and counts per risk and status.">
+    <img src="/assets/sample-summary.png" width="784" height="1109" alt="Findings summary page of a sample Word report made with Rootnote: eight findings with severity, CVSS 3.1 Base score, status and CWE classification, and counts per severity, CVSS band and status.">
     <figcaption>A real page from the sample report (fictional client, synthetic evidence). In Rootnote, choose <strong>Open the sample</strong> to explore it.</figcaption>
   </figure>
 </section>
@@ -149,7 +149,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
   <div><h2>Write the findings</h2><ul>
     <li>Paste screenshots (Win+Shift+S, Ctrl+V) or drop PNG/JPEG between the steps.</li>
     <li>Black out, pixelate, box, arrow and crop without leaving the app. Blacked-out pixels are gone from the saved file.</li>
-    <li>Rating, CVSS 3.1 calculator, status, type, CWE, affected assets and references.</li>
+    <li>Rating, CVSS 3.1 and 4.0 Base calculators, status, type, CWE, affected assets and references.</li>
     <li>12 OWASP-referenced starter findings, plus your own finding library.</li></ul></div>
   <div><h2>Get the report out</h2><ul>
     <li>Real Word styles, table of contents, numbered figures, a linked findings summary; A4 or Letter.</li>
@@ -170,7 +170,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
   <div><h2>Limits, honestly</h2><ul>
     <li>Per project: 20 findings, 30 screenshots (2 MiB each), 25 MiB file. These are the sizes we have tested, not a paid restriction; tell us if they get in your way.</li>
     <li>One built-in report design; your own Word template is not supported.</li>
-    <li>No scanner imports, CVSS 4.0, collaboration or AI.</li>
+    <li>No scanner imports, collaboration or AI. CVSS 4.0 is Base metrics only.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
     <p><a href="/guide/">Read the guide</a> · <a href="/help-us-check/">Help us check what is not tested yet</a></p>
     <p>Did something stop you finishing a report? <a href="https://github.com/unravelnetworks/rootnote/issues/new?template=blocked.yml">Tell us in one short answer</a> (public, so no client details) or email support@unravelnetworks.com. Rootnote has no usage telemetry, so this is how we decide what to build next.</p></div>
@@ -187,7 +187,7 @@ const readme = markdown((await readFile(`${repo}release-template/README.md`, 'ut
 const GUIDE_DESCRIPTIONS = {
   '': 'The Rootnote guide: how to write pentest findings, add and black out screenshots, design the report and export an editable Word document.',
   'start-here': 'Start here: open the sample, make a new pentest report in Rootnote, save the project file and export it to Word.',
-  findings: 'Write pentest findings in Rootnote: rating, CVSS 3.1 Base score, CWE, affected assets, references, and reusable finding text.',
+  findings: 'Write pentest findings in Rootnote: rating, CVSS 3.1 or 4.0 Base score, CWE, affected assets, references, and reusable finding text.',
   screenshots: 'Add screenshots to Rootnote findings by pasting or dropping them, caption them, black out secrets and handle tall captures.',
   'report-design': 'Design the Rootnote report: title, client and cover, logos, how findings are rated, and which sections appear in what order.',
   files: 'Rootnote project files: saving, one folder per engagement, cloud folders, recovery drafts, and what to do if a file will not open.',

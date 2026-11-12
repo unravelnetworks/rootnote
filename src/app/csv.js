@@ -6,7 +6,7 @@
 // hidden in the report are left empty.
 // UTF-8 with a byte-order mark and CRLF line ends, which Excel reads correctly.
 import { resolveFindingPrefix } from './project.js';
-import { parseCvss31, formatFindingStatus } from '../scoring/index.js';
+import { parseCvss, cvssLabel, cvssExportProblem, reportCvssVersion, formatFindingStatus } from '../scoring/index.js';
 
 // Also after leading spaces or invisible characters, and full-width look-alikes, since some
 // spreadsheet imports trim or fold them, including direction marks,
@@ -22,6 +22,8 @@ export function csvCell(value) {
 
 /** The whole file as text (with the byte-order mark), for the project `doc`. */
 export function findingsCsv(doc) {
+  const problem = cvssExportProblem(doc, true);
+  if (problem) throw new Error(problem);
   const p = doc.project;
   const labels = p.labels;
   const label = (key) => p.sections.finding.find((s) => s.key === key)?.label ?? key;
@@ -30,11 +32,12 @@ export function findingsCsv(doc) {
   const cell = (key, text) => (shown(key) ? text : '');
   const prefix = resolveFindingPrefix(p);
   const images = new Map(doc.images.map((im) => [im.id, im]));
-  const header = ['ID', 'Title', p.scoring.mode.startsWith('risk') ? labels.risk : labels.severity, `${labels.cvss} score`, `${labels.cvss} vector`,
+  const header = ['ID', 'Title', p.scoring.mode.startsWith('risk') ? labels.risk : labels.severity, `${cvssLabel(labels.cvss, reportCvssVersion(doc))} score`, `${cvssLabel(labels.cvss, reportCvssVersion(doc))} vector`,
     labels.status, labels.vulnerabilityType ?? 'Vulnerability type', labels.cwe ?? 'CWE', label('assets'), label('description'), label('details'),
     label('impact'), label('threat'), label('recommendation'), label('references')];
   const rows = doc.findings.map((f, i) => {
-    const score = f.cvss ? parseCvss31(f.cvss).score.toFixed(1) : '';
+    // The score stays a number; the vector column next to it names its CVSS version.
+    const score = f.cvss ? parseCvss(f.cvss).score.toFixed(1) : '';
     const details = !shown('details') ? '' : (f.details ?? []).map((b) => (b.type === 'text' ? b.text
       : `[Screenshot ${b.imageId}${images.get(b.imageId)?.caption ? `: ${images.get(b.imageId).caption}` : ''}]`)).join('\n\n');
     const evidence = !shown('evidence') ? [] : (f.evidence ?? []).map((id) => `[Screenshot ${id}${images.get(id)?.caption ? `: ${images.get(id).caption}` : ''}]`);

@@ -24,7 +24,7 @@ for (const [engine, port] of [['chrome', 9594], ['firefox', 9694]]) test(`own se
     assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
     // A blank report: the sample already has its own section and classifications.
     await b.evaluate("document.querySelector('[data-testid=start-new]').click()");
-    assert.ok(await b.waitFor(`${snap}.schemaVersion === 6 && ${snap}.findings.length === 0`));
+    assert.ok(await b.waitFor(`${snap}.schemaVersion === 7 && ${snap}.findings.length === 0`));
 
     await t.test('Add creates an enabled, empty section before the findings summary; nothing prints yet', async () => {
       await b.evaluate("document.querySelector('[data-testid=custom-add]').click()");

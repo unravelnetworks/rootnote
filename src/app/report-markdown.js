@@ -4,6 +4,7 @@
 // become placeholders naming the figure; images are never embedded. The table of contents and
 // the count tables are left out: Markdown viewers build their own navigation.
 import { createReportPlan } from '../export-docx/plan.js';
+import { cvssExportProblem } from '../scoring/index.js';
 import { escapeMd, body, fence, findingBlock } from './finding-text.js';
 
 // A table cell is one line: line breaks become spaces, and escapeMd already escapes "|".
@@ -31,6 +32,8 @@ function engagementRow(r) {
 
 /** Markdown for the whole report of `project`. */
 export function reportMarkdown(project) {
+  const problem = cvssExportProblem(project);
+  if (problem) throw new Error(problem);
   const plan = createReportPlan(project);
   const m = plan.metadata;
   const out = [`# ${escapeMd(m.title || '(untitled report)')}`];

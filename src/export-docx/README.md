@@ -8,7 +8,7 @@ Call it only with a project that has passed the shared validator for its schema 
 
 ## How it is built
 
-- **`plan.js`** builds a pure report plan with `createReportPlan(project, { paperSize })`: page geometry in CSS px at 96 dpi, labels and metadata, cover and running logos, the ordered report sections, the findings summary, and each finding's key facts, sections and evidence. The editor's paged preview (`src/editor/preview.js`) renders the same plan, so the preview and the Word file share their content and image geometry. CVSS 3.1 Base scores come from `src/scoring/`.
+- **`plan.js`** builds a pure report plan with `createReportPlan(project, { paperSize })`: page geometry in CSS px at 96 dpi, labels and metadata, cover and running logos, the ordered report sections, the findings summary, and each finding's key facts, sections and evidence. The editor's paged preview (`src/editor/preview.js`) renders the same plan, so the preview and the Word file share their content and image geometry. CVSS 3.1 and 4.0 Base scores come from `src/scoring/`; each displayed score names its version.
 - **`v2.js`** turns the plan into Word with the `docx` library. Despite its name it handles every current schema version; older files reach it through migration in the app. The original schema v1 path in `index.js` is kept for the frozen v1 fixtures.
 - **`design.js`** holds the shared design tokens and the severity and CVSS badge colours.
 

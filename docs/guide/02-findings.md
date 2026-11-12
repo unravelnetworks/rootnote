@@ -11,12 +11,14 @@ Choose **+ New finding** in the list on the left. A report can hold up to 20 fin
 At the top of a finding:
 
 1. Choose the **Severity** (1).
-2. To add a CVSS 3.1 score, open **CVSS calculator** (2) and pick the metrics. Rootnote works out the vector and the score.
+2. To add a CVSS score, open the **CVSS calculator** (2) and pick the metrics. Rootnote works out the vector and the score. The calculator uses the report's CVSS version, set in **Sections & scoring**.
 3. Fill in **Affected assets**, **Status**, **Vulnerability type** and **CWE**.
 
 ![A finding's key facts: Severity marked 1 and the CVSS calculator marked 2.](__IMG_FACTS__)
 
-Rootnote calculates the CVSS 3.1 Base score only. You choose the metrics and the severity; it does not choose them for you.
+Rootnote calculates Base scores only: CVSS 3.1 Base, or CVSS 4.0 Base (also called CVSS-B), which leaves out Threat, Environmental and Supplemental metrics. A report uses one CVSS version for every finding, named in the score label. Rootnote does not convert scores between versions.
+
+A finding scored in the other version (after you switch the report's version, or from your finding library) is marked pending, and its old score stays until you replace it. Its calculator suggests the answers whose meaning carries over and marks them **suggested**; review them, choose the rest, then click **Apply**. Until every pending finding is applied or cleared, exports that show CVSS scores, and Findings as CSV, are blocked. You choose the metrics and the severity; it does not choose them for you.
 
 If the report shows CVSS scores and a finding has no vector, the report says *Unscored* for it. That is different from a score of zero.
 

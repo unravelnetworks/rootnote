@@ -67,7 +67,7 @@ body:
     id: version
     attributes:
       label: "Rootnote version"
-      description: "Shown under About & licences, for example 0.1.5."
+      description: "Shown under About & licences, for example 0.2.0."
     validations:
       required: true
   - type: input

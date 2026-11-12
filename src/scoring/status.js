@@ -17,7 +17,7 @@ export function formatEngagementStatus(status,{notSet='Not set'}={}) {
 }
 /** Every finding once, including unset. Display flags do not change these data. */
 export function findingStatusCounts(doc) {
-  if (![4,5,6].includes(doc?.schemaVersion)||!Array.isArray(doc.findings)) throw new Error('A validated schema v4, v5 or v6 project is required.');
+  if (![4,5,6,7].includes(doc?.schemaVersion)||!Array.isArray(doc.findings)) throw new Error('A validated schema v4 to v7 project is required.');
   const labels=doc.project.labels;
   const rows=[...FINDING_STATUSES,null].map(key=>({key,label:formatFindingStatus(key,{notSet:labels.statusNotSet}),count:0}));
   for (const finding of doc.findings) {

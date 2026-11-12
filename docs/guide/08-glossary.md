@@ -8,7 +8,7 @@ The words Rootnote uses, and what they mean in this guide.
 |---|---|
 | Additional details | The part of a finding where text blocks and screenshots alternate in reading order. |
 | Check & export | The view that lists reminders before export and makes the Word, Markdown, CSV and PDF output. |
-| CVSS 3.1 Base | A standard score for a vulnerability, built from metrics you choose. Rootnote calculates the Base vector and score only. |
+| CVSS Base | A standard score for a vulnerability, built from metrics you choose. Rootnote calculates CVSS 3.1 and CVSS 4.0 Base vectors and scores only. |
 | CWE | Common Weakness Enumeration: a standard number for the kind of weakness, for example CWE-79 for cross-site scripting. |
 | Engagement | One piece of work for one client, for example a web application test. |
 | Engagement ID | Your reference for the engagement. Finding IDs are built from it. |

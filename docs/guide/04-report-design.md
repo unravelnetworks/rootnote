@@ -18,9 +18,9 @@ Open **Page, cover and logos** in **Details & cover**.
 
 ## How findings are rated
 
-In **Sections & scoring**, choose **Scoring** (1): severity, risk or CVSS 3.1, alone or together.
+In **Sections & scoring**, choose **Scoring** (1): severity, risk or CVSS, alone or together. **This report uses** (2) sets the CVSS version for every finding: CVSS 3.1 or CVSS 4.0. Changing it keeps every score: findings scored in the old version are marked pending until you apply a new assessment in each one (see Findings). Rootnote does not convert scores between versions.
 
-![The Scoring choice marked 1.](__IMG_SECTIONS__)
+![The Scoring choice marked 1 and This report uses marked 2.](__IMG_SECTIONS__)
 
 The report's *How findings are rated* section explains your method to the reader. It is text you can edit, so make sure it matches how you rated the findings.
 

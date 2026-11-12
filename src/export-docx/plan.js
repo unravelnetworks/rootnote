@@ -2,7 +2,7 @@
 // Pure ESM: no DOM, canvas, docx, I/O, or application-state mutations.
 import { resolveFindingPrefix, REPORT_SECTIONS, FINDING_SECTIONS, REPORT_SECTIONS_V4, REPORT_SECTIONS_V5, FINDING_SECTIONS_V4, SCORING_MODES, LIMITS, savedSize, screenshotRefs, detailsTextLength, validateReferences,
   CUSTOM_LIMITS, CUSTOM_SECTION_ID, customKey, customTitleErrors, cweErrors, vulnerabilityTypeErrors } from '../app/project.js';
-import { parseCvss31, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
+import { parseCvss, cvssLabel, reportCvssVersion, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
 import { reportDesign, ratingBadge, cvssBadge } from './design.js';
 export { resolveFindingPrefix } from '../app/project.js';
 
@@ -29,12 +29,15 @@ export function resolveEngagementValue(row, meta) {
   return txt(meta[row.source] ?? '');
 }
 
-function scoring(finding, mode, labels) {
+function scoring(finding, mode, labels, version, authoredCvss = labels.cvss) {
   const result = [];
   if (mode !== 'cvss') result.push({ key: 'rating', label: mode.startsWith('risk') ? labels.risk : labels.severity, value: finding.rating ?? labels.unscored, badge:ratingBadge(finding.rating) });
   if (mode.includes('cvss')) {
-    const parsed = finding.cvss === null ? null : parseCvss31(finding.cvss);
-    result.push({ key: 'cvss', label: labels.cvss, value: parsed ? parsed.score.toFixed(1) : labels.unscored, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
+    // The report uses one CVSS version, named in the label. A score in another version (to be
+    // rescored before export) says which version it is; text copied out always does (versioned).
+    const parsed = finding.cvss === null ? null : parseCvss(finding.cvss);
+    const versioned = parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored;
+    result.push({ key: 'cvss', label: parsed && parsed.version !== version ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, ownLabel: parsed ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
   }
   return result;
 }
@@ -109,11 +112,13 @@ function partsFor(image, figure, geometry, labels) {
 }
 
 export function createReportPlan(project, { paperSize = project?.project?.paperSize } = {}) {
-  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v6 project and A4/Letter paper are required.');
+  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6,7].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v7 project and A4/Letter paper are required.');
   if (!Array.isArray(project.findings) || project.findings.length > 20 || !Array.isArray(project.images) || project.images.length > 32 || savedSize(project) > LIMITS.fileBytes) throw new Error('Project exceeds supported bounds.');
   const p = project.project, mode = p.scoring.mode, v4=project.schemaVersion>=4;
   if (!SCORING_MODES.includes(mode)) throw new Error('Unsupported scoring mode.');
   const labels = Object.fromEntries(Object.entries(p.labels).map(([key, value]) => [key, txt(value)]));
+  const cvssVersionUsed = reportCvssVersion(project), authoredCvss = labels.cvss;
+  labels.cvss = cvssLabel(labels.cvss, cvssVersionUsed);
   // v6: the user's own sections. Each has exactly one report row,
   // labelled with its title; ids are short and Word-safe, so anchors fit a bookmark name.
   const v6=project.schemaVersion>=6, custom=new Map();
@@ -209,7 +214,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       return value.trim() ? [{ key: s.key, label: s.label, kind: 'text', text: value,
         format, literal:s.key === 'assets',keepTogether:shortSection(value,format,geometry.contentWidth,design,s.key==='assets') }] : [];
     });
-    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels);
+    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels,cvssVersionUsed,authoredCvss);
     const keyFacts=[{key:'id',label:labels.idColumn,value:displayId,badge:null,detail:null},...scores.map(s=>({...s,detail:s.vector??null}))];
     const status=v4?{key:finding.status,label:txt(formatFindingStatus(finding.status,{notSet:labels.statusNotSet}))}:null;
     if(v4&&p.findingStatusDisplay.keyFacts)keyFacts.push({key:'status',label:labels.status,value:status.label,badge:null,detail:null});
@@ -223,17 +228,20 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       anchor: 'finding_' + finding.id.replace('-', '_'), backToSummary: p.backToSummaryLinks && summaryEnabled,
       scoring:scores,keyFacts, sections,...(v4?{status}:{}),...(v6?{classification}:{}) };
   });
-  const scoreColumns = findings[0]?.scoring ?? scoring({ rating: null, cvss: null }, mode, labels);
+  const scoreColumns = findings[0]?.scoring ?? scoring({ rating: null, cvss: null }, mode, labels, cvssVersionUsed);
   const classifyColumn=v6&&summaryEnabled&&p.classificationDisplay.summaryColumn;
   // One combined column: "Type (CWE-n)", either one alone, or a dash when both are empty.
   const classified=f=>{const {cwe,vulnerabilityType:t}=f.classification;return t&&cwe?`${t} (${cwe})`:t||cwe||'\u2013';};
   const summary = { enabled: summaryEnabled, anchor: 'report_summary', ratingCounts: ratingCounts(project),
-    columns: [{ key: 'id', label: labels.idColumn }, { key: 'title', label: labels.titleColumn }, ...scoreColumns.map(s => ({ key: s.key, label: s.label })),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?[{key:'status',label:labels.status}]:[]),...(classifyColumn?[{key:'classification',label:labels.classification}]:[])],
+    columns: [{ key: 'id', label: labels.idColumn }, { key: 'title', label: labels.titleColumn }, ...scoreColumns.map(s => ({ key: s.key, label: s.key === 'cvss' ? labels.cvss : s.label })),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?[{key:'status',label:labels.status}]:[]),...(classifyColumn?[{key:'classification',label:labels.classification}]:[])],
     rows: findings.map(f => ({ id: f.id, displayId: f.displayId, title: f.title, anchor: f.anchor,
       badges:Object.fromEntries(f.scoring.map(s=>[s.key,s.badge])),
       values: { id: f.displayId, title: f.title, ...Object.fromEntries(f.scoring.map(s => [s.key, s.value])),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?{status:f.status.label}:{}),...(classifyColumn?{classification:classified(f)}:{}) } })),
     ...(v4?{statusCounts:summaryEnabled&&p.findingStatusDisplay.counts?findingStatusCounts(project):null,
       statusNote:summaryEnabled&&(p.findingStatusDisplay.summaryColumn||p.findingStatusDisplay.counts)?'Counts include every finding in this report, whatever its status.':null}:{}) };
+  // Shown in the preview while CVSS counts are withheld (exports are refused in that state).
+  const withheld=summary.ratingCounts.cvssWithheld;
+  summary.cvssCountsNote=summaryEnabled&&withheld?`${labels.cvss} counts are not shown: ${withheld===1?'1 finding is':`${withheld} findings are`} scored in another CVSS version. Rescore or clear ${withheld===1?'its score':'their scores'} to show them.`:null;
   Object.assign(summary,summaryGeometry(summary.columns,summary.rows,geometry,design));
   summary.countTables=summaryEnabled?horizontalCounts(summary):[];
   let reportSections = reportConfigs.filter(s => s.enabled).flatMap(s => {

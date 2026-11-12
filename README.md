@@ -16,7 +16,7 @@ Open source means you can read, build and check the code. Rootnote has not had a
 
 ## What it does
 
-- Findings with severity or CVSS 3.1 Base scores, CWE, affected assets, references and your own sections.
+- Findings with severity or CVSS Base scores (CVSS 3.1 or 4.0, one version per report), CWE, affected assets, references and your own sections.
 - Paste screenshots into a finding; black out, crop and annotate them in the app.
 - Word output with real styles, numbered figure captions and a findings summary that links to each finding.
 - A built-in sample report (fictional client, synthetic evidence) and starter findings.

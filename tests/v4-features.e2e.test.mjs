@@ -31,7 +31,7 @@ for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`schema
 
     await t.test('a new project is current (v6) and Draft; the engagement status can be changed', async () => {
       const d = await b.evaluate(snap);
-      assert.equal(d.schemaVersion, 6);
+      assert.equal(d.schemaVersion, 7);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=engagement-status]').selectedOptions[0].textContent"), 'Draft');
       await b.evaluate(select('[data-testid=engagement-status]', 'delivered'));
       assert.equal(await b.evaluate(`${snap}.project.engagementStatus`), 'delivered');
@@ -142,7 +142,7 @@ for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`schema
       await b.setFile('[data-testid=open-input]', v2fixture);
       assert.ok(await b.waitFor(`${snap}.findings.length === 3`), await b.evaluate("document.querySelector('.status').textContent + ' | dialog: ' + (document.querySelector('dialog')?.textContent ?? 'none')"));
       const d = await b.evaluate(snap);
-      assert.equal(d.schemaVersion, 6); // converted to the current schema
+      assert.equal(d.schemaVersion, 7); // converted to the current schema
       assert.equal(d.project.engagementStatus, null);
       assert.ok(d.findings.every((f) => f.status === null));
       assert.match(await b.evaluate("document.querySelector('.status').textContent"), /converted it from an older version/);

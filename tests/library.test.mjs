@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createEmptyLibrary, openLibraryFile, checkLibrary, serializeLibrary, entryFromFinding, findingFromEntry, mergeLibraries,
-  newEntryId, LIBRARY_LIMITS,
+  newEntryId, LIBRARY_LIMITS, LIBRARY_VERSION,
 } from '../src/app/library.js';
 import { createEmptyProject, validateProjectFile, defaultFormats } from '../src/app/project.js';
 
@@ -62,7 +62,7 @@ const rejects = (name, mutate, pattern) => test(`library rejects: ${name}`, () =
 });
 const e0 = (d) => d.entries[0];
 rejects('a project file', (d) => { d.format = 'fieldnote-project'; }, /not a finding library/);
-rejects('newer version', (d) => { d.libraryVersion = 4; }, /newer version/);
+rejects('newer version', (d) => { d.libraryVersion = 5; }, /newer version/);
 rejects('unknown file field', (d) => { d.extra = 1; }, /unknown field "extra"/);
 rejects('image block', (d) => { e0(d).details.push({ type: 'image', imageId: 'IMG-0001' }); }, /no screenshots/);
 rejects('block with an id', (d) => { e0(d).details[0].id = 'B-1'; }, /unknown field "id"/);
@@ -142,12 +142,12 @@ test('library: a v1 file opens as the current version with entries untouched; v1
   const r = openLibraryFile(v1raw, Buffer.byteLength(v1raw));
   assert.ok(r.ok, r.errors?.join('; '));
   assert.equal(r.openedVersion, 1);
-  assert.equal(r.library.libraryVersion, 3);
+  assert.equal(r.library.libraryVersion, 4);
   assert.deepEqual(r.library.entries, lib.entries);
   assert.ok(!('references' in r.library.entries[0]));
   const withRefs = JSON.stringify({ format: 'fieldnote-library', libraryVersion: 1, entries: [{ ...lib.entries[0], references: [] }] });
   assert.match(openLibraryFile(withRefs, Buffer.byteLength(withRefs)).errors.join(' '), /unknown field "references"/);
-  assert.match(serializeLibrary(r.library), /"libraryVersion":3/);
+  assert.match(serializeLibrary(r.library), /"libraryVersion":4/);
 });
 
 test('library v2: references follow the project rules and survive save, reopen, copy and insert', () => {
@@ -159,7 +159,7 @@ test('library v2: references follow the project rules and survive save, reopen, 
   const lib = { ...createEmptyLibrary(), entries: [entry] };
   const back = open(lib);
   assert.ok(back.ok, back.errors?.join('; '));
-  assert.equal(back.openedVersion, 3);
+  assert.equal(back.openedVersion, LIBRARY_VERSION, 'a new library opens in the current version');
   const g = findingFromEntry(back.library.entries[0], 9);
   assert.equal(g.status, 'open');
   assert.deepEqual(g.references, f.references);
@@ -172,4 +172,21 @@ test('library v2: references follow the project rules and survive save, reopen, 
   ]) {
     assert.match(checkLibrary({ ...lib, entries: [{ ...entry, references: refs }] }, '0.4.0').join(' '), re);
   }
+});
+
+test('library v4 keeps a CVSS 4.0 vector; v1 to v3 files still accept only CVSS 3.1', () => {
+  const v40 = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+  const base = createEmptyLibrary();
+  const entry = { id: newEntryId(), name: 'Four', title: 'Four', rating: null, cvss: v40, formats: defaultFormats(), details: [] };
+  assert.equal(LIBRARY_VERSION, 4);
+  assert.deepEqual(checkLibrary({ ...base, entries: [entry] }, '0.2.0'), []);
+  for (const libraryVersion of [1, 2, 3]) {
+    assert.match(checkLibrary({ ...base, libraryVersion, entries: [entry] }, '0.2.0').join(' '), /canonical CVSS 3\.1 Base vector/, `v${libraryVersion}`);
+  }
+  // Not canonical (metrics out of order) or with a Threat metric: refused.
+  const shuffled = 'CVSS:4.0/AC:L/AV:N/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
+  assert.match(checkLibrary({ ...base, entries: [{ ...entry, cvss: shuffled }] }, '0.2.0').join(' '), /3\.1 or 4\.0/);
+  assert.match(checkLibrary({ ...base, entries: [{ ...entry, cvss: v40 + '/E:A' }] }, '0.2.0').join(' '), /3\.1 or 4\.0/);
+  // Inserting keeps the vector as stored: no conversion either way.
+  assert.equal(findingFromEntry(entry, 1).cvss, v40);
 });

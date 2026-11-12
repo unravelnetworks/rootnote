@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import {
-  createEmptyProjectV1, createEmptyProjectV2 as createEmptyProject, migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, validateProjectFile, openProjectFile,
+  createEmptyProjectV1, createEmptyProjectV2 as createEmptyProject, migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, validateProjectFile, openProjectFile,
   resolveFindingPrefix, savedSize, findingId, imageId, LIMITS, LABEL_KEYS,
 } from '../src/app/project.js';
 
@@ -137,7 +137,7 @@ rejects('prefix over 40', (p) => { p.project.findingPrefix = 'P'.repeat(41); }, 
 rejects('bad scoring mode', (p) => { p.project.scoring.mode = 'dread'; }, /must be one of/);
 rejects('missing backToSummaryLinks', (p) => { delete p.project.backToSummaryLinks; }, /backToSummaryLinks: missing/);
 rejects('control character in a label', (p) => { p.project.labels.page = 'Pa\u0001ge'; }, /cannot be written to Word/);
-rejects('newer schema 7', (p) => { p.schemaVersion = 7; }, /newer version/);
+rejects('newer schema 8', (p) => { p.schemaVersion = 8; }, /newer version/);
 
 test('v1 still rejects the v2-only auto tall mode', async () => {
   const p = createEmptyProjectV1();
@@ -175,7 +175,7 @@ for (const name of ['small', 'bounds']) {
     assert.equal(r.migratedFrom, 1);
     assert.equal(r.overBudgetBytes, 0);
     const v2 = r.project;
-    assert.equal(v2.schemaVersion, 6); // v1 -> v2 -> v3 -> v4 -> v5 -> v6; the v1 values are checked below
+    assert.equal(v2.schemaVersion, 7); // v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7; the v1 values are checked below
     assert.equal(v2.appVersion, '0.2.0');
     assert.equal(v2.createdAt, v1.createdAt);
     assert.equal(v2.savedAt, v1.savedAt);
@@ -226,12 +226,12 @@ test('migration keeps absent optional fields absent and nulls null', () => {
   assert.equal(v2.findings[0].rating, null);
 });
 
-test('a v2 file opens converted through v3, v4 and v5 to v6, with nothing else changed', async () => {
+test('a v2 file opens converted through v3, v4, v5 and v6 to v7, with nothing else changed', async () => {
   const raw = JSON.stringify(sampleV2());
   const r = await openText(raw);
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 2);
-  assert.deepEqual(r.project, migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(JSON.parse(raw), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }));
+  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(JSON.parse(raw), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }));
 });
 
 test('an invalid v1 file is refused before migration', async () => {

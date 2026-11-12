@@ -28,7 +28,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`rating
 
     await t.test('a converted v4 file has the section off and empty', async () => {
       const p = await b.evaluate(snap);
-      assert.equal(p.schemaVersion, 6); // converted to the current schema
+      assert.equal(p.schemaVersion, 7); // converted to the current schema
       assert.deepEqual(p.project.ratingMethod, { text: '' });
       assert.equal(p.project.sections.report.find((s) => s.key === 'ratingMethod').enabled, false);
     });
@@ -57,7 +57,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`rating
       await b.evaluate("(() => { const s = document.querySelector('[data-testid=scoring-mode]'); s.value = 'cvss'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
       assert.equal(await b.evaluate(`${snap}.project.ratingMethod.text`), 'Our own method.');
       await b.evaluate(nav('Details & cover'));
-      assert.match(await b.evaluate("document.querySelector('[data-testid=rating-method-fill]').textContent"), /CVSS 3\.1 Base$/);
+      assert.match(await b.evaluate("document.querySelector('[data-testid=rating-method-fill]').textContent"), /CVSS Base$/);
       await b.evaluate("document.querySelector('[data-testid=rating-method-fill]').click()");
       assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
       await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");

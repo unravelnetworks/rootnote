@@ -19,9 +19,16 @@ export function renderPreview(host, plan, { images, onTallMode }) {
   const d = plan.design;
   const pt = (n) => px(n * 96 / 72);
   const pages = h('div', { class: 'pv-pages', style: `--pv-accent: #${d.accent}; --pv-on-accent: #${d.onAccent}; --pv-ink: #${d.ink}; --pv-muted: #${d.muted}; --pv-line: #${d.line}; --pv-soft: #${d.soft}; --pv-label: #${d.labelFill}; --pv-code: #${d.codeFill}; --pv-code-border: #${d.codeBorder}; --pv-body-after: ${pt(d.bodyAfterPt)}; --pv-body-line: ${pt(d.bodyLinePt)}; --pv-code-line: ${pt(d.codeLinePt)}; --pv-h2-before: ${pt(d.heading2BeforePt)}; --pv-h2-after: ${pt(d.heading2AfterPt)}; --pv-caption-after: ${pt(d.captionAfterPt)}; --pv-image-before: ${pt(d.imageBeforePt)}; --pv-image-after: ${pt(d.imageAfterPt)}` });
+  // A report that would mix CVSS versions is not printed by any route (the app's button, Ctrl+P
+  // or the browser menu): print media shows this notice instead of the pages (style.css).
+  const mixed = plan.findings.filter((f) => f.scoring.some((s) => s.mismatch)).length;
+  const printBlock = mixed ? h('div', { class: 'pv-print-block', 'data-testid': 'print-block' },
+    h('p', {}, `This report was not printed: ${mixed === 1 ? '1 finding is' : `${mixed} findings are`} scored in another CVSS version than the report's. Rescore or clear ${mixed === 1 ? 'its score' : 'their scores'} in Rootnote, then print again.`)) : null;
+  host.toggleAttribute('data-print-blocked', !!mixed);
   host.replaceChildren(
     h('p', { class: 'pv-note', 'data-testid': 'preview-note' }, h('strong', {}, 'Approximate pages; check the exported report in Word. '),
       'Screenshot sizes and split parts follow the export settings; where Word breaks text across pages can differ.'),
+    ...(printBlock ? [printBlock] : []),
     pages);
   // Print rules for any print of the preview, from the app's button, Ctrl+P or the browser
   // menu: the report's paper size, and page boxes half a millimetre shorter than the paper.
@@ -129,7 +136,8 @@ export function renderPreview(host, plan, { images, onTallMode }) {
           h('thead', {}, h('tr', {}, h('th', { class: 'pv-counts-name' }, t.label), ...t.columns.map((c) => h('th', c.key === 'total' ? { class: 'pv-counts-total' } : badgeAttrs(c.badge), c.label)))),
           h('tbody', {}, h('tr', {}, h('td', { class: 'pv-counts-name' }, t.rowLabel), ...t.columns.map((c) => h('td', c.key === 'total' ? { class: 'pv-counts-total' } : {}, String(c.count)))))));
       const note = plan.summary.statusNote ? h('p', { class: 'pv-status-note' }, plan.summary.statusNote) : null;
-      if (counts.length || note) place(h('div', { class: 'pv-keep pv-counts-block' }, ...counts, note));
+      const withheld = plan.summary.cvssCountsNote ? h('p', { class: 'pv-status-note pv-withheld', 'data-testid': 'cvss-counts-withheld' }, plan.summary.cvssCountsNote) : null;
+      if (counts.length || note || withheld) place(h('div', { class: 'pv-keep pv-counts-block' }, withheld, ...counts, note));
     } else if (s.kind === 'engagement') {
       heading();
       place(h('table', { class: 'pv-engagement' }, h('tbody', {}, ...s.rows.map((r) => h('tr', {}, h('th', {}, r.label), h('td', {}, ...paragraphs(r.value, r.format, r.literal)))))));

@@ -1,7 +1,7 @@
 // Default text for the "How findings are rated" section (schema v5, R5 B2). The editor fills
 // it only when the user asks; it is never regenerated, so edits are kept. Wording is
 // original. Manual ratings (Severity, Risk) are described as the tester's judgment; only
-// CVSS 3.1 Base is described as calculated, with the FIRST qualitative bands.
+// CVSS Base (3.1 or 4.0) is described as calculated, with the FIRST qualitative bands.
 
 const LEVELS = [
   ['Critical', 'can be exploited easily, typically without special access, and gives control of a system or broad access to sensitive data. Fix immediately.'],
@@ -20,7 +20,7 @@ function manual(name, risk) {
 
 function cvss(name, unscored) {
   return [
-    `${name} is the score calculated from the finding's CVSS version 3.1 Base metrics, shown with its vector. It describes the issue's technical severity and does not include environmental or business factors. Scores map to these bands:`,
+    `${name} is the score calculated from the finding's CVSS Base metrics, shown with its vector. Every finding in this report is scored with the same CVSS version, named in the score label and at the start of each vector. A CVSS 4.0 Base score (also called CVSS-B) does not include Threat, Environmental or Supplemental metrics. Either way the score describes the issue's technical severity and does not include environmental or business factors. Scores map to these bands:`,
     '',
     '- Critical: 9.0 to 10.0',
     '- High: 7.0 to 8.9',

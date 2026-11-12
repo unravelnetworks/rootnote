@@ -23,7 +23,8 @@ test('headings follow the report plan: report sections, then Findings, then each
 test('each finding matches the single-finding export, one heading level deeper', () => {
   const p = sample();
   const md = reportMarkdown(p);
-  const one = findingText(p, 1).replace(/^(#+) /gm, '#$1 ');
+  // Copied on its own, the score also names its version (the report's label is left behind).
+  const one = findingText(p, 1).replace(/^(#+) /gm, '#$1 ').replace(/^(- \*\*CVSS[^*]*:\*\* \d+\.\d) \(3\.1\)/m, '$1');
   assert.ok(md.includes(one.trimEnd()), 'finding 2 appears exactly as the copy-as-Markdown output, shifted one level');
 });
 

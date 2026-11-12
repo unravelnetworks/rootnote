@@ -8,7 +8,7 @@ The step-by-step guide is in `guide.html` in this folder (it works offline) and 
 
 1. Open `rootnote.html` in current **Google Chrome**, **Microsoft Edge** or **Firefox** (double-click it, or drag it into a browser window). See *Browsers* below for what differs between them.
 2. Choose **New report**, or **Open a project** to continue a saved one. To see a finished report first, choose **Open the sample**: it is built into Rootnote and uses a fictional client and synthetic evidence. The same project is included as `sample-project.rootnote.json`, and `sample-report.docx` is the Word file it produces.
-3. Fill in **Details & cover**. In **Sections & scoring**, choose the report sections, their order and names, add up to 10 of your own sections, and pick the scoring: severity, risk or CVSS 3.1, alone or with CVSS.
+3. Fill in **Details & cover**. In **Sections & scoring**, choose the report sections, their order and names, add up to 10 of your own sections, and pick the scoring: severity, risk or CVSS (3.1 or 4.0 Base), alone or with CVSS.
 4. Click **New finding** for each finding. Set the rating (or use the CVSS calculator), affected assets, status, vulnerability type and CWE, then write the sections.
 5. In **Additional details**, write the steps and put screenshots between the text where they belong:
    - **paste** a screenshot (for example Win+Shift+S, then Ctrl+V); it goes after the text box you are in
@@ -105,7 +105,7 @@ The app's messages round these limits to "2 MB" and "25 MB".
 
 - An optional cover page with your logo and the client's logo, or a title page when the cover is off. The first enabled, nonempty report section starts on a new page after the cover/title block; later sections follow your configured order.
 - An optional table of contents, executive summary, rating explanation, engagement table, scope, your own sections, and a findings summary table with links to each finding.
-- Scoring: severity, risk or CVSS 3.1, alone or with CVSS. Finding IDs use your engagement ID (for example `UNR-2026-014-3`).
+- Scoring: severity, risk or CVSS (3.1 or 4.0 Base, one version per report), alone or with CVSS. Finding IDs use your engagement ID (for example `UNR-2026-014-3`).
 - One section per finding, starting on a new page (a long finding continues over further pages), with its rating, status, vulnerability type and CWE. You choose which sections appear, their order and their names in **Sections & scoring**. Empty optional sections are left out:
   - affected assets, description, additional details, impact, threat, recommendation, references
   - additional details keep your text and screenshots in the order you placed them; screenshots are numbered and captioned
@@ -131,9 +131,9 @@ The app's messages round these limits to "2 MB" and "25 MB".
 ## What it does not do
 
 - **It does not find or hide sensitive data for you.** Screenshot editing covers what you mark, nothing else. Text is exported exactly as you wrote it. Metadata removal does not find data deliberately hidden inside the compressed picture data or inside a colour profile.
-- **It does not judge severity or write content.** There is no AI. The CVSS 3.1 calculator turns the metrics you pick into a Base vector and score; severity is whatever you choose.
+- **It does not judge severity or write content.** There is no AI. The CVSS 3.1 and 4.0 calculators turn the metrics you pick into a Base vector and score; severity is whatever you choose.
 - **The checklist is a set of reminders, not a quality or compliance certification.**
-- **Not supported:** your own Word template, importing a .docx back, scanner imports, CVSS 4.0 and collaboration.
+- **Not supported:** your own Word template, importing a .docx back, scanner imports, CVSS 4.0 Threat, Environmental and Supplemental metrics, and collaboration.
 
 ## Browsers
 

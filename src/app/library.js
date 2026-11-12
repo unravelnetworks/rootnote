@@ -2,18 +2,21 @@
 // Library v2 adds optional references; v1
 // files are read with the unchanged v1 rules and held as v2 in memory. Library v3 (with project schema v6)
 // adds an optional CWE and vulnerability type per entry; v1 and v2 files are
-// read with their own rules and held as v3. Saves write v3.
+// read with their own rules and held as v3. Library v4 (with project schema v7) also accepts a
+// CVSS 4.0 Base vector; v1 to v3 files still accept only CVSS 3.1, are held as v4, and saves
+// write v4.
 // The library is held in memory and saved as a file; it never touches browser storage.
 // Bounds hold after every change, not only on open.
 import { LIMITS, SEVERITIES, FORMAT_KEYS, findingId, newBlockId, defaultFormats, validateReferences, cweErrors, vulnerabilityTypeErrors } from './project.js';
-import { parseCvss31 } from '../scoring/index.js';
+import { parseCvss31, parseCvss40 } from '../scoring/index.js';
 
 export const LIBRARY_FORMAT = 'fieldnote-library';
-export const LIBRARY_VERSION = 3;
+export const LIBRARY_VERSION = 4;
 export const LIBRARY_LIMITS = Object.freeze({ fileBytes: 5242880, entries: 500, name: 120, appVersion: 32 });
 
 const ENTRY_ID = /^L-[0-9a-f]{32}$/;
 const CVSS31 = /^CVSS:3\.1\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]$/;
+const CVSS40 = /^CVSS:4\.0\/AV:[NALP]\/AC:[LH]\/AT:[NP]\/PR:[NLH]\/UI:[NPA]\/VC:[HLN]\/VI:[HLN]\/VA:[HLN]\/SC:[HLN]\/SI:[HLN]\/SA:[HLN]$/;
 const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const FILE_KEYS = ['format', 'libraryVersion', 'appVersion', 'savedAt', 'entries'];
@@ -81,9 +84,9 @@ export function libraryErrors(data) {
   if (!plainObject(data)) return ['file: not a library file'];
   for (const k of Object.keys(data)) if (!FILE_KEYS.includes(k)) err('file', `unknown field "${k}"`);
   if (data.format !== LIBRARY_FORMAT) return ['file: not a finding library (missing format marker)'];
-  if (![1, 2, 3].includes(data.libraryVersion)) return [Number.isInteger(data.libraryVersion) && data.libraryVersion > LIBRARY_VERSION
+  if (![1, 2, 3, 4].includes(data.libraryVersion)) return [Number.isInteger(data.libraryVersion) && data.libraryVersion > LIBRARY_VERSION
     ? `file: saved by a newer version (library ${data.libraryVersion}); this build reads library ${LIBRARY_VERSION}` : 'file: unsupported libraryVersion'];
-  const entryKeys = data.libraryVersion === 1 ? ENTRY_KEYS_V1 : data.libraryVersion === 2 ? ENTRY_KEYS_V2 : ENTRY_KEYS_V3;
+  const entryKeys = data.libraryVersion === 1 ? ENTRY_KEYS_V1 : data.libraryVersion === 2 ? ENTRY_KEYS_V2 : ENTRY_KEYS_V3; // v4 entries have the v3 fields
   if (own(data, 'appVersion') && (typeof data.appVersion !== 'string' || data.appVersion.length > LIBRARY_LIMITS.appVersion || XML_INVALID.test(data.appVersion))) err('appVersion', 'invalid');
   if (own(data, 'savedAt') && !validTimestamp(data.savedAt)) err('savedAt', 'must be a valid ISO date-time');
   if (!Array.isArray(data.entries)) { err('entries', 'must be a list'); return errors; }
@@ -105,7 +108,11 @@ export function libraryErrors(data) {
     line(e.name, `${path}.name`, { required: true, max: LIBRARY_LIMITS.name, nonBlank: true });
     line(e.title, `${path}.title`, { required: true });
     if (own(e, 'rating') && !(e.rating === null || SEVERITIES.includes(e.rating))) err(`${path}.rating`, 'invalid rating');
-    if (own(e, 'cvss') && !(e.cvss === null || (typeof e.cvss === 'string' && CVSS31.test(e.cvss) && parseCvss31(e.cvss).vector === e.cvss))) err(`${path}.cvss`, 'must be a canonical CVSS 3.1 Base vector or null');
+    // Library v1-v3 accept only CVSS 3.1; v4 also a canonical CVSS 4.0 Base vector.
+    const cvss40 = data.libraryVersion >= 4 && typeof e.cvss === 'string' && CVSS40.test(e.cvss) && parseCvss40(e.cvss).vector === e.cvss;
+    if (own(e, 'cvss') && !(e.cvss === null || cvss40 || (typeof e.cvss === 'string' && CVSS31.test(e.cvss) && parseCvss31(e.cvss).vector === e.cvss))) {
+      err(`${path}.cvss`, data.libraryVersion >= 4 ? 'must be a canonical CVSS 3.1 or 4.0 Base vector or null' : 'must be a canonical CVSS 3.1 Base vector or null');
+    }
     if (own(e, 'affectedAssets')) {
       if (!Array.isArray(e.affectedAssets) || e.affectedAssets.length > LIMITS.assets) err(`${path}.affectedAssets`, `must be a list of at most ${LIMITS.assets}`);
       else e.affectedAssets.forEach((a, j) => line(a, `${path}.affectedAssets[${j}]`, { required: true }));

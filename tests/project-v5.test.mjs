@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import JSZip from 'jszip';
 import {
-  createEmptyProjectV5 as createEmptyProject, createEmptyProjectV4, migrateV4toV5, migrateV5toV6, openProjectFile, validateProjectFile, validateProjectFileV5,
+  createEmptyProjectV5 as createEmptyProject, createEmptyProjectV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, openProjectFile, validateProjectFile, validateProjectFileV5,
   projectFromSettings, SETTINGS_KEPT, REPORT_SECTIONS_V5, LIMITS, RATING_METHOD_LABEL,
 } from '../src/app/project.js';
 import { createReportPlan } from '../src/export-docx/plan.js';
@@ -43,8 +43,8 @@ test('a new project is v5: the section sits before the findings summary, off, wi
   assert.ok((await check(d)).ok);
   assert.ok((await validateProjectFileV5(json(d), Buffer.byteLength(json(d)))).ok);
   const r = await openProjectFile(json(d), Buffer.byteLength(json(d)));
-  assert.equal(r.migratedFrom, 5, 'v5 files open converted to v6');
-  assert.deepEqual(r.project, migrateV5toV6(d));
+  assert.equal(r.migratedFrom, 5, 'v5 files open converted to v7');
+  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(d)));
 });
 
 test('v4 -> v5 appends the section off with empty text and changes nothing else', () => {
@@ -82,7 +82,7 @@ test('the validator refuses a missing, malformed, oversized or Word-invalid rati
   const v4WithField = createEmptyProjectV4(NOW);
   v4WithField.project.ratingMethod = { text: '' };
   assert.match((await errorsOf(v4WithField)).join(), /unknown field "ratingMethod"/);
-  assert.equal((await openProjectFile(json({ ...createEmptyProject(NOW), schemaVersion: 7 }), 10)).newer, true);
+  assert.equal((await openProjectFile(json({ ...createEmptyProject(NOW), schemaVersion: 8 }), 10)).newer, true);
 });
 
 function planOf(d) { return createReportPlan(d); }
@@ -148,7 +148,7 @@ test('default text: manual ratings are a judgment, CVSS is calculated with the F
   for (const level of ['Critical', 'High', 'Medium', 'Low', 'Informational']) assert.match(sev, new RegExp(`^- ${level}: `, 'm'));
   const both = defaultRatingMethodText('risk+cvss', labels);
   assert.match(both, /Risk rating/);
-  assert.match(both, /CVSS score is the score calculated from the finding's CVSS version 3\.1 Base metrics/);
+  assert.match(both, /CVSS score is the score calculated from the finding's CVSS Base metrics, shown with its vector\. Every finding in this report is scored with the same CVSS version/);
   assert.match(both, /- Critical: 9\.0 to 10\.0[\s\S]*- None: 0\.0/);
   assert.match(both, /shown as No score\./);
   assert.doesNotMatch(defaultRatingMethodText('cvss', labels), /judgment/);

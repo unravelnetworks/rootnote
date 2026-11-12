@@ -8,7 +8,7 @@ Rootnote is one HTML file. The editor and report-generation code are bundled int
 - **Editor** (`src/editor/`): the user interface. It edits the project in memory, and normal edits are constrained to the current file-format limits. Saving can still fail because of browser, permission, storage or disk problems; migrated projects over the size budget use the documented recovery state.
 - **Report plan** (`src/export-docx/plan.js`): a pure function from a validated project to a report plan (sections, findings, figures, page geometry). Both the Word export and the on-screen preview render this one plan.
 - **Word export** (`src/export-docx/`): turns the plan into a `.docx` with the `docx` library. See `src/export-docx/README.md`.
-- **Scoring** (`src/scoring/`): CVSS 3.1 Base calculation and status labels.
+- **Scoring** (`src/scoring/`): CVSS 3.1 Base calculation, CVSS 4.0 Base calculation (`cvss40.js`, a port of the FIRST reference calculator, checked against it on every Base vector) and status labels.
 - **Guide** (`docs/guide/`, rendered by `scripts/guide.mjs`): one Markdown source for the online Guide and the offline `guide.html` in the download.
 - **Website** (`site/`): builds the static site for rootnote.unravelnetworks.com, including its security headers and redirects. `site/serve-headers.mjs` serves the build locally with those headers and redirects; it is a stand-in, so the live site is still checked after each deployment.
 
