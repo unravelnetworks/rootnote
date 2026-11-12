@@ -235,3 +235,12 @@ test('the report version picks the mismatches: none after rescoring, and the rul
   d.findings[0].cvss = null;
   assert.deepEqual(cvssMismatches(d), []);
 });
+
+test('a finding kept in the other version, copied on its own, is labelled with its own version', async () => {
+  const { findingText } = await import('../src/app/finding-text.js');
+  const d = mixed();
+  assert.match(findingText(d, 1), /\*\*CVSS 4\.0 Base:\*\* 9\.3 \(4\.0\)/);
+  assert.match(findingText(d, 0), /\*\*CVSS 3\.1 Base:\*\* 9\.8 \(3\.1\)/);
+  d.project.labels.cvss = 'Score';
+  assert.match(findingText(d, 1), /\*\*Score \(CVSS 4\.0\):\*\* 9\.3 \(4\.0\)/);
+});

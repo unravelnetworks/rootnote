@@ -29,7 +29,7 @@ export function resolveEngagementValue(row, meta) {
   return txt(meta[row.source] ?? '');
 }
 
-function scoring(finding, mode, labels, version) {
+function scoring(finding, mode, labels, version, authoredCvss = labels.cvss) {
   const result = [];
   if (mode !== 'cvss') result.push({ key: 'rating', label: mode.startsWith('risk') ? labels.risk : labels.severity, value: finding.rating ?? labels.unscored, badge:ratingBadge(finding.rating) });
   if (mode.includes('cvss')) {
@@ -37,7 +37,7 @@ function scoring(finding, mode, labels, version) {
     // rescored before export) says which version it is; text copied out always does (versioned).
     const parsed = finding.cvss === null ? null : parseCvss(finding.cvss);
     const versioned = parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored;
-    result.push({ key: 'cvss', label: labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
+    result.push({ key: 'cvss', label: labels.cvss, ownLabel: parsed ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
   }
   return result;
 }
@@ -117,7 +117,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
   const p = project.project, mode = p.scoring.mode, v4=project.schemaVersion>=4;
   if (!SCORING_MODES.includes(mode)) throw new Error('Unsupported scoring mode.');
   const labels = Object.fromEntries(Object.entries(p.labels).map(([key, value]) => [key, txt(value)]));
-  const cvssVersionUsed = reportCvssVersion(project);
+  const cvssVersionUsed = reportCvssVersion(project), authoredCvss = labels.cvss;
   labels.cvss = cvssLabel(labels.cvss, cvssVersionUsed);
   // v6: the user's own sections. Each has exactly one report row,
   // labelled with its title; ids are short and Word-safe, so anchors fit a bookmark name.
@@ -214,7 +214,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       return value.trim() ? [{ key: s.key, label: s.label, kind: 'text', text: value,
         format, literal:s.key === 'assets',keepTogether:shortSection(value,format,geometry.contentWidth,design,s.key==='assets') }] : [];
     });
-    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels,cvssVersionUsed);
+    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels,cvssVersionUsed,authoredCvss);
     const keyFacts=[{key:'id',label:labels.idColumn,value:displayId,badge:null,detail:null},...scores.map(s=>({...s,detail:s.vector??null}))];
     const status=v4?{key:finding.status,label:txt(formatFindingStatus(finding.status,{notSet:labels.statusNotSet}))}:null;
     if(v4&&p.findingStatusDisplay.keyFacts)keyFacts.push({key:'status',label:labels.status,value:status.label,badge:null,detail:null});
