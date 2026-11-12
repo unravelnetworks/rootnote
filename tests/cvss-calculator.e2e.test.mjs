@@ -156,6 +156,13 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate(pick('SA', 'N'));
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40);
       assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /Score 9\.3 \(CVSS 4\.0 Base/);
+      assert.doesNotMatch(await b.evaluate("document.querySelector('[data-testid=cvss-calc-hint]').textContent"), /Not scored/, 'the hint follows the score');
+      // Cleared, then pasted: the hint says not scored, then follows the pasted vector.
+      await b.evaluate(typeVector(''));
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-calc-hint]').textContent"), /Not scored yet/);
+      await b.evaluate(typeVector(V40));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40);
+      assert.doesNotMatch(await b.evaluate("document.querySelector('[data-testid=cvss-calc-hint]').textContent"), /Not scored/);
       assert.equal(await b.evaluate("document.querySelector('.nav [data-testid=rating-dot]').title"), 'CVSS 4.0 Base: 9.3', 'plain score; the label names the version');
     });
     assert.deepEqual(b.errors, [], 'page errors or CSP violations');

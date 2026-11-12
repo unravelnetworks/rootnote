@@ -1254,8 +1254,15 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         ? `Stored: score ${parsed.score.toFixed(1)} in CVSS ${parsed.version}, but this report uses CVSS ${version}. Rescore it with the calculator below, or clear it, before you export.`
         : `Score ${parsed.score.toFixed(1)} (CVSS ${parsed.version} Base, calculated from the vector).`;
     };
+    // The calculator button's hint follows the stored score: it says when there is none.
+    const calcHint = h('span', { class: 'hint', 'data-testid': 'cvss-calc-hint' });
+    const syncHint = () => {
+      calcHint.textContent = mismatch() ? `Rescore this finding in CVSS ${version}`
+        : f.cvss ? 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring' : 'Not scored yet: pick the metrics to score this finding';
+    };
     const showCvssNote = (error = typedError, incomplete = false) => {
       typedError = error;
+      syncHint();
       cvssNote.textContent = error
         ? `${error} Not saved until it is valid, for example ${CVSS_EXAMPLE[version]}. ${f.cvss ? `Still stored: ${f.cvss}.` : ''}`.trim()
         : incomplete
@@ -1284,6 +1291,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
           e.target.value = f.cvss || '';
           syncCalculator();
           typedError = null;
+          syncHint();
           cvssNote.textContent = `Not saved: the project is at its size limit. ${stored()}`;
           cvssNote.dataset.kind = 'error';
         }
@@ -1313,7 +1321,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       metricsFor.forEach(([key], i) => { picked[key] = m[key]; selects[i].querySelector('select').value = m[key] ?? ''; });
     }
     const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator', open: mismatch() },
-      h('summary', {}, `CVSS ${version} calculator`, h('span', { class: 'hint', 'data-testid': 'cvss-calc-hint' }, mismatch() ? `Rescore this finding in CVSS ${version}` : f.cvss ? 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring' : 'Not scored yet: pick the metrics to score this finding')),
+      h('summary', {}, `CVSS ${version} calculator`, calcHint),
       version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
       h('div', { class: 'cvss-grid' }, ...selects));
     return [
