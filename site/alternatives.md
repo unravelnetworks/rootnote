@@ -20,6 +20,8 @@ Every fact about another tool links to that project's own repository or document
 | Serpico | BSD-3-Clause | Self-hosted (Docker); archived since 2020 | Multi-user, shared findings and attachments | Word, from your own templates | 2, 3 and DREAD |
 | A Word template | Depends on the template; Word is licensed separately | Word | Depends on your Word setup | Word | Your choice |
 
+Base means the CVSS Base metric group only (CVSS-B). We have not checked whether the other tools' CVSS 4.0 support goes beyond the Base metrics.
+
 ## Each tool in short
 
 **SysReptor.** You design the report in HTML, write findings in Markdown, and get a PDF. Simultaneous editing needs the Professional edition. Its licence lets you use and self-host it but limits forks and redistribution. [Repository](https://github.com/Syslifters/sysreptor), [CVSS fields](https://docs.sysreptor.com/designer/field-types#cvss), [co-editing](https://docs.sysreptor.com/reporting/collaborative-editing).
@@ -46,6 +48,7 @@ Every fact about another tool links to that project's own repository or document
 
 - Two or more people write the same report at once. Look at PwnDoc, PwnDoc-ng, Ghostwriter or SysReptor Professional.
 - You start from scanner output. Dradis CE imports it; Rootnote does not.
+- You need CVSS 4.0 beyond the Base metrics. Rootnote scores CVSS 4.0 Base only. PwnDoc, PeTeReport and SysReptor document CVSS 4.0; we have not checked how far beyond Base each one goes.
 - You must deliver in your own Word template. PwnDoc, Ghostwriter and AttackForge ReportGen fill templates you control. Rootnote has one built-in design with your sections, logos and colours.
 - You want to manage clients and infrastructure, not just write the report. Look at Ghostwriter.
 - Your reports have more than 20 findings or 30 screenshots. Rootnote enforces those tested limits.
