@@ -48,7 +48,7 @@ export function checklist(doc) {
     // would otherwise mix scores that cannot be compared. The CSV always holds CVSS scores.
     if (f.cvss && cvssVersion(f.cvss) !== reportCvssVersion(doc)) {
       warnings.push({ where, go: f.id, text: mode.endsWith('cvss')
-        ? `Scored in CVSS ${cvssVersion(f.cvss)}, but this report uses CVSS ${reportCvssVersion(doc)}. Rescore or clear it; until then, export will fail.`
+        ? `CVSS ${reportCvssVersion(doc)} assessment pending (it has a CVSS ${cvssVersion(f.cvss)} score). Apply a CVSS ${reportCvssVersion(doc)} assessment or clear its score; until then, export will fail.`
         : `Has a CVSS ${cvssVersion(f.cvss)} vector, but this report uses CVSS ${reportCvssVersion(doc)}. CVSS is hidden in the report; Findings as CSV is refused until you rescore or clear it.` });
     }
     if (enabled('finding', 'assets') && !(f.affectedAssets || []).length) warnings.push({ where, go: f.id, text: `${label('assets')} is empty.` });

@@ -20,7 +20,7 @@ import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem 
 import { findingsCsv } from '../app/csv.js';
 import { checklist } from './checklist.js';
 import { canPickSaveLocation, pickSaveFile, writeToHandle, saveErrorText } from './save.js';
-import { parseCvss, cvssVersion, cvssLabel, cvssExportProblem, switchedCvssLabel, reportCvssVersion, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
+import { parseCvss, cvssVersion, cvssLabel, cvssExportProblem, cvssSuggestions, switchedCvssLabel, reportCvssVersion, formatFindingStatus, formatEngagementStatus } from '../scoring/index.js';
 import { createReportPlan, resolveEngagementValue } from '../export-docx/plan.js';
 import { findingText } from '../app/finding-text.js';
 import { reportMarkdown } from '../app/report-markdown.js';
@@ -1057,7 +1057,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         'Shown in the findings summary and in each finding. Risk is the rating you assign; it is not calculated. Values you hide stay saved.'),
         field('This report uses', h('select', { 'data-testid': 'cvss-report-version', onchange: (e) => switchCvssVersion(e.target) },
           ...['3.1', '4.0'].map((v) => h('option', { value: v, selected: p.scoring.cvssVersion === v }, `CVSS ${v} Base`))),
-        'Every finding is scored in this version. Changing it deletes the CVSS scores in the other version, after asking; the findings are kept. Rootnote does not convert scores, so you rescore those findings.'),
+        'Every finding is scored in this version. Changing it keeps every score: findings in the other version are marked pending until you apply a new assessment. Rootnote does not convert scores.'),
         h('div', { class: 'field' }, checkbox(p, 'backToSummaryLinks', 'Add a link back to the findings summary under each finding')))),
       card('Finding status in the report', h('div', { class: 'field', 'data-testid': 'status-display' },
         checkbox(p.findingStatusDisplay, 'keyFacts', 'Show the status in each finding\'s key facts'),
@@ -1238,44 +1238,64 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       ...SEVERITIES.map((s) => h('option', { value: s, selected: f.rating === s }, s)));
     const cvssNote = h('span', { class: 'hint', id: 'cvss-note', 'data-testid': 'cvss-note' });
     // The report uses one CVSS version (Sections & scoring); every calculator follows it. A
-    // stored vector in the other version is kept, shown with its own version, and must be
-    // rescored or cleared before a report with CVSS scores is exported.
+    // stored vector in the other version (kept when the report switched, or from a library)
+    // stays until the tester applies an assessment in the report's version or clears it, and
+    // until then blocks exports that show CVSS. Its calculator is a draft seeded with
+    // suggestions that carry over (cvssSuggestions); nothing is stored until Apply.
     const version = reportCvssVersion(doc);
     const metricsFor = version === '4.0' ? CVSS40_METRICS : CVSS_METRICS;
+    const count = metricsFor.length === 8 ? 'eight' : 'eleven';
     const mismatch = () => !!f.cvss && cvssVersion(f.cvss) !== version;
+    const old = mismatch() ? parseCvss(f.cvss) : null;
+    const draft = old ? cvssDraft(f, version) : null;
     // The note always describes the stored vector, plus whichever pending state applies:
-    // invalid typed text (kept until replaced by a valid vector or cleared), or an
-    // incomplete calculator (the stored vector stays until every metric is chosen).
+    // invalid typed text (kept until replaced by a valid vector or cleared), an incomplete
+    // calculator (the stored vector stays until every metric is chosen), or a pending draft.
     let typedError = null;
     const stored = () => {
       if (!f.cvss) return `Not scored. Open the CVSS ${version} calculator and pick every metric, or paste a CVSS ${version} vector.`;
       const parsed = parseCvss(f.cvss);
-      return mismatch()
-        ? `Stored: score ${parsed.score.toFixed(1)} in CVSS ${parsed.version}, but this report uses CVSS ${version}. Rescore it with the calculator below, or clear it, before you export.`
-        : `Score ${parsed.score.toFixed(1)} (CVSS ${parsed.version} Base, calculated from the vector).`;
+      return `Score ${parsed.score.toFixed(1)} (CVSS ${parsed.version} Base, calculated from the vector).`;
+    };
+    const chosen = () => metricsFor.filter(([k]) => picked[k]).length;
+    const draftVector = () => (chosen() === metricsFor.length ? parseCvss(`CVSS:${version}/${metricsFor.map(([k]) => `${k}:${picked[k]}`).join('/')}`) : null);
+    const pendingNote = () => {
+      const head = `Existing CVSS ${old.version} score: ${old.score.toFixed(1)}. CVSS ${version} assessment pending.`;
+      const d = draftVector();
+      return d
+        ? `${head} Draft CVSS ${version} score ${d.score.toFixed(1)}, not applied. Apply it to replace the CVSS ${old.version} score.`
+        : `${head} ${chosen()} of ${metricsFor.length} metrics chosen. Menus marked "suggested" come from the CVSS ${old.version} vector and are not a CVSS ${version} assessment: review every metric. Draft choices are not saved in the project file.`;
     };
     // The calculator button's hint follows the stored score: it says when there is none.
     const calcHint = h('span', { class: 'hint', 'data-testid': 'cvss-calc-hint' });
     const syncHint = () => {
-      calcHint.textContent = mismatch() ? `Rescore this finding in CVSS ${version}`
+      calcHint.textContent = mismatch() ? `CVSS ${version} assessment pending: review the suggestions and apply`
         : f.cvss ? 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring' : 'Not scored yet: pick the metrics to score this finding';
     };
+    const applyButton = h('button', { type: 'button', 'data-testid': 'cvss-apply', disabled: true, onclick: () => { const d = draftVector(); if (d) applyCvss(f, d.vector, version); } }, `Apply CVSS ${version}`);
     const showCvssNote = (error = typedError, incomplete = false) => {
       typedError = error;
       syncHint();
+      applyButton.disabled = !(old && draftVector());
       cvssNote.textContent = error
         ? `${error} Not saved until it is valid, for example ${CVSS_EXAMPLE[version]}. ${f.cvss ? `Still stored: ${f.cvss}.` : ''}`.trim()
-        : incomplete
-          ? `Calculator incomplete: choose all ${metricsFor.length === 8 ? 'eight' : 'eleven'} metrics to change the vector. ${f.cvss ? `Still stored: ${stored()}` : 'Nothing stored yet.'}`
-          : stored();
-      cvssNote.dataset.kind = error || mismatch() ? 'error' : incomplete ? 'pending' : '';
+        : old
+          ? pendingNote()
+          : incomplete
+            ? `Calculator incomplete: choose all ${count} metrics to change the vector. ${f.cvss ? `Still stored: ${stored()}` : 'Nothing stored yet.'}`
+            : stored();
+      cvssNote.dataset.kind = error || old ? 'error' : incomplete ? 'pending' : '';
     };
-    showCvssNote(null);
     const cvss = h('input', {
       type: 'text', class: 'mono', value: f.cvss || '', maxlength: 64, spellcheck: 'false', 'data-testid': 'cvss', placeholder: 'Not scored', 'aria-describedby': 'cvss-note',
       oninput: (e) => {
         const v = e.target.value.trim();
-        if (v === '') { if (setField(f, 'cvss', null)) { showCvssNote(null); syncCalculator(); renderNav(); } return; }
+        // Clearing a pending finding removes its old score: a deliberate step, with Undo.
+        if (v === '') {
+          if (old) applyCvss(f, null, version);
+          else if (setField(f, 'cvss', null)) { showCvssNote(null); syncCalculator(); renderNav(); }
+          return;
+        }
         let parsed;
         try { parsed = parseCvss(v); } catch (err) { showCvssNote(err.message); return; }
         // Only vectors in the report's version are entered; the other version is never stored.
@@ -1283,6 +1303,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
           showCvssNote(`This report uses CVSS ${version}. Enter a CVSS ${version} vector, or change the report's version in Sections & scoring.`);
           return;
         }
+        // A pasted vector replaces a pending finding's old score as an Apply does (with Undo).
+        if (old) { applyCvss(f, parsed.vector, version); return; }
         // Only the canonical metric order is stored; the box shows what the user typed until it is re-rendered.
         if (setField(f, 'cvss', parsed.vector)) { showCvssNote(null); syncCalculator(); renderNav(); }
         else {
@@ -1300,30 +1322,41 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     });
     // CVSS calculator: pick the Base metrics; the vector and score follow. The arithmetic is
     // src/scoring (CVSS 3.1 specification, FIRST CVSS 4.0 reference); nothing else is stored.
-    const picked = f.cvss && !mismatch() ? { ...parseCvss(f.cvss).metrics } : {};
+    const picked = draft ? draft.picked : f.cvss ? { ...parseCvss(f.cvss).metrics } : {};
     const selects = metricsFor.map(([key, name, values]) => {
+      const tag = h('span', { class: 'suggested', 'data-testid': `cvss-suggested-${key}`, hidden: !draft?.suggested.has(key) }, 'suggested');
       const sel = h('select', { 'data-testid': `cvss-${key}`, 'aria-label': name,
         onchange: (e) => {
           picked[key] = e.target.value;
+          if (draft) {
+            // A pending finding's calculator is a draft: nothing is stored until Apply.
+            draft.suggested.delete(key);
+            tag.hidden = true;
+            showCvssNote(typedError);
+            return;
+          }
           if (metricsFor.every(([k]) => picked[k])) {
             const vector = `CVSS:${version}/${metricsFor.map(([k]) => `${k}:${picked[k]}`).join('/')}`;
-            // A complete calculator replaces any invalid typed text, or a score in the other version.
+            // A complete calculator replaces any invalid typed text.
             if (setField(f, 'cvss', parseCvss(vector).vector)) { cvss.value = f.cvss; showCvssNote(null); renderNav(); }
             else { syncCalculator(); showCvssNote(); } // refused (budget): menus show the stored vector again
           } else showCvssNote(typedError, true);
         } },
         h('option', { value: '', selected: !picked[key] }, '–'),
         ...values.map(([v, text]) => h('option', { value: v, selected: picked[key] === v }, text)));
-      return h('label', { class: 'field' }, h('span', { class: 'label' }, name), sel);
+      return h('label', { class: 'field' }, h('span', { class: 'label' }, name, ' ', tag), sel);
     });
     function syncCalculator() {
       const m = f.cvss && !mismatch() ? parseCvss(f.cvss).metrics : {};
       metricsFor.forEach(([key], i) => { picked[key] = m[key]; selects[i].querySelector('select').value = m[key] ?? ''; });
     }
-    const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator', open: mismatch() },
+    showCvssNote(null);
+    const calculator = h('details', { class: 'cvss-calc', 'data-testid': 'cvss-calculator', open: !!old },
       h('summary', {}, `CVSS ${version} calculator`, calcHint),
       version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
-      h('div', { class: 'cvss-grid' }, ...selects));
+      old ? h('p', { class: 'hint', 'data-testid': 'cvss-previous' }, `Previous assessment, CVSS ${old.version}: ${old.score.toFixed(1)}, ${old.vector}`) : null,
+      h('div', { class: 'cvss-grid' }, ...selects),
+      old ? h('div', { class: 'row' }, applyButton) : null);
     return [
       field(showRating ? ratingLabel : `${ratingLabel} (hidden by the scoring setting)`, rating),
       field(showCvss ? labels.cvss : `${labels.cvss} vector (hidden by the scoring setting)`, cvss, cvssNote),
@@ -1354,25 +1387,57 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const next = select.value;
     if (next === from) return;
     const before = { doc, gen: generation, rev: revision };
-    const lose = doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== next);
-    const undoable = undoAvailable();
-    if (lose.length) {
-      const one = lose.length === 1;
-      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${one ? `1 finding has a CVSS ${from} score. Its CVSS score will be deleted; the finding and its other content will be kept.` : `${lose.length} findings have CVSS ${from} scores. Their CVSS scores will be deleted; the findings and their other content will be kept.`} Rootnote does not convert scores between versions. Choose the CVSS ${next} metrics to rescore ${one ? 'it' : 'them'}. ${undoable ? 'Undo is available right after, until your next edit.' : 'This cannot be undone while the project is over the size limit.'}`, `Use CVSS ${next}`);
+    // Scores are kept: a finding scored in the old version waits for the tester to apply an
+    // assessment in the new one (its calculator suggests what carries over). Nothing converts.
+    const pending = doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== next).length;
+    if (pending) {
+      const one = pending === 1;
+      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${one ? `1 finding has a CVSS ${from} score. It is kept and marked CVSS ${next} pending.` : `${pending} findings have CVSS ${from} scores. They are kept and marked CVSS ${next} pending.`} Rootnote does not convert scores: in each finding, review the suggested metrics, choose the rest and apply a CVSS ${next} assessment. Until then, exports that show CVSS are blocked.`, `Use CVSS ${next}`);
       if (!ok || generation !== before.gen || revision !== before.rev || doc !== before.doc) { select.value = from; return; }
     }
-    const saved = lose.map((f) => [f, f.cvss]);
     const label = p.labels.cvss;
     const newLabel = switchedCvssLabel(label, next);
-    const apply = () => { p.scoring.cvssVersion = next; p.labels.cvss = newLabel; for (const [f] of saved) f.cvss = null; };
-    const revert = () => { p.scoring.cvssVersion = from; p.labels.cvss = label; for (const [f, v] of saved) f.cvss = v; };
+    const apply = () => { p.scoring.cvssVersion = next; p.labels.cvss = newLabel; };
+    const revert = () => { p.scoring.cvssVersion = from; p.labels.cvss = label; };
     if (!change(apply, revert)) { select.value = from; return; }
     renderNav();
     render();
-    say(`This report now uses CVSS ${next}.${saved.length ? ` ${saved.length} CVSS score${saved.length === 1 ? '' : 's'} deleted; rescore ${saved.length === 1 ? 'that finding' : 'those findings'} with the calculator.` : ''}`);
-    if (saved.length && undoable) {
-      offerUndo(`Switched the report to CVSS ${next} and deleted ${saved.length} CVSS score${saved.length === 1 ? '' : 's'}.`,
-        () => (change(revert, apply) ? true : BUDGET_REASON), () => { renderNav(); render(); say(`This report uses CVSS ${from} again; the scores are back.`); });
+    say(`This report now uses CVSS ${next}.${pending ? ` ${pending} finding${pending === 1 ? ' is' : 's are'} pending a CVSS ${next} assessment; Check & export lists ${pending === 1 ? 'it' : 'them'}.` : ''}`);
+    if (pending && undoAvailable()) {
+      offerUndo(`Switched the report to CVSS ${next}.`,
+        () => (change(revert, apply) ? true : BUDGET_REASON), () => { renderNav(); render(); say(`This report uses CVSS ${from} again.`); });
+    }
+  }
+
+  // Draft calculators for findings pending a new CVSS version, in memory only: keyed by the
+  // project, the finding, the target version and the stored vector, so a changed vector or
+  // project starts afresh. Seeded with cvssSuggestions; never saved.
+  const cvssDrafts = new WeakMap();
+  function cvssDraft(f, version) {
+    let byDoc = cvssDrafts.get(doc);
+    if (!byDoc) cvssDrafts.set(doc, byDoc = new Map());
+    const key = `${f.id}|${version}|${f.cvss}`;
+    if (!byDoc.has(key)) {
+      const picked = cvssSuggestions(f.cvss, version);
+      byDoc.set(key, { picked, suggested: new Set(Object.keys(picked)) });
+    }
+    return byDoc.get(key);
+  }
+  /** Replaces a pending finding's score in the other version with `vector` (or clears it),
+   * as one change with Undo. */
+  function applyCvss(f, vector, version) {
+    const previous = f.cvss;
+    const was = cvssVersion(previous);
+    if (!change(() => { f.cvss = vector; }, () => { f.cvss = previous; })) { render(); return; }
+    renderNav();
+    render();
+    say(vector ? `Applied the CVSS ${version} assessment; it replaces the CVSS ${was} score.` : `Cleared the CVSS ${was} score.`);
+    if (undoAvailable()) {
+      offerUndo(vector ? `Applied CVSS ${version} to "${short(f.title || '(untitled)')}".` : `Cleared the CVSS ${was} score of "${short(f.title || '(untitled)')}".`, () => {
+        const g = findingById(f.id);
+        if (!g) return 'the finding no longer exists.';
+        return change(() => { g.cvss = previous; }, () => { g.cvss = vector; }) || BUDGET_REASON;
+      }, () => { renderNav(); render(); say(`The CVSS ${was} score is back.`); });
     }
   }
 

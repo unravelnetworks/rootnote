@@ -244,3 +244,17 @@ test('a finding kept in the other version, copied on its own, is labelled with i
   d.project.labels.cvss = 'Score';
   assert.match(findingText(d, 1), /\*\*Score \(CVSS 4\.0\):\*\* 9\.3 \(4\.0\)/);
 });
+
+test('switch suggestions: only metrics whose meaning carries over, never a whole vector', async () => {
+  const { cvssSuggestions } = await import('../src/scoring/index.js');
+  assert.deepEqual(cvssSuggestions('CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:N', '4.0'), { AV: 'N', PR: 'L', UI: 'N', VC: 'H', VI: 'L', VA: 'N' }, 'AC never: 3.1 AC split into AC and AT');
+  assert.deepEqual(cvssSuggestions('CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N', '4.0'), { AV: 'N', PR: 'N' }, 'UI:R (passive or active?) and S:C impacts are left to the tester');
+  assert.deepEqual(cvssSuggestions(V40, '3.1'), { AV: 'N', PR: 'N', UI: 'N' });
+  assert.deepEqual(cvssSuggestions('CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:A/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N', '3.1'), { AV: 'A', PR: 'H', UI: 'R' });
+  assert.deepEqual(cvssSuggestions(V31, '3.1'), {}, 'same version: nothing to suggest');
+  for (const v of [V31, V40]) {
+    const target = v.startsWith('CVSS:3.1') ? '4.0' : '3.1';
+    const n = Object.keys(cvssSuggestions(v, target)).length;
+    assert.ok(n < (target === '4.0' ? 11 : 8), 'a suggestion is never a complete vector');
+  }
+});

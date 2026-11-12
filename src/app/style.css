@@ -656,6 +656,9 @@ button:disabled:not(.secondary):not(.ghost):not(.linkish) { background: var(--pa
 .finding > .cvss-calc > summary:hover { border-color: var(--fg); }
 .finding > .cvss-calc > summary .hint { font-weight: 400; }
 .finding > .cvss-calc[open] > summary { margin-bottom: 10px; }
+/* A metric suggested from the other CVSS version until the tester picks it. */
+.cvss-calc .suggested { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg); background: var(--warn-bg); border-radius: 4px; padding: 1px 5px; }
+.cvss-calc .suggested[hidden] { display: none; }
 .finding > .cvss-calc[open] { padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); }
 .finding > .facts { margin-bottom: 8px; }
 .format-help { margin: 8px 0 0; }

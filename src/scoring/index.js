@@ -103,6 +103,28 @@ export function cvssExportProblem(doc, withCvss = doc.project.scoring.mode.inclu
   return `${n === 1 ? '1 finding is' : `${n} findings are`} scored in another CVSS version than this report's CVSS ${reportCvssVersion(doc)}. Rescore or clear ${n === 1 ? 'its score' : 'their scores'} first; Check & export lists ${n === 1 ? 'it' : 'them'}.`;
 }
 
+/** Suggestions for scoring a finding in `target` from its vector in the other CVSS version:
+ * only metrics whose meaning carries over (Codex/Marketing 156; FIRST CVSS 4.0 user guide).
+ * They are a draft for the tester to review, never a score: Rootnote does not convert.
+ * 3.1 to 4.0: Attack Vector and Privileges Required; User Interaction only when it was None;
+ * Confidentiality, Integrity and Availability as the vulnerable system's only when Scope was
+ * Unchanged. Attack Complexity, Attack Requirements and the other systems' impact are left
+ * to the tester (3.1 Attack Complexity covered what 4.0 splits into two questions).
+ * 4.0 to 3.1: Attack Vector, Privileges Required, and User Interaction (Passive or Active is
+ * Required). Returns the suggested metrics, possibly none. */
+export function cvssSuggestions(vector, target) {
+  const { version, metrics: m } = parseCvss(vector);
+  if (version === target) return {};
+  const out = { AV: m.AV, PR: m.PR };
+  if (target === '4.0') {
+    if (m.UI === 'N') out.UI = 'N';
+    if (m.S === 'U') Object.assign(out, { VC: m.C, VI: m.I, VA: m.A });
+  } else {
+    out.UI = m.UI === 'N' ? 'N' : 'R';
+  }
+  return out;
+}
+
 /** A CVSS 3.1 or 4.0 Base vector, by its prefix: { version, vector, metrics, score }. Callers
  * that must accept only 3.1 (older file versions) keep using parseCvss31. */
 export function parseCvss(input) {

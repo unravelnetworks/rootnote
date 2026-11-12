@@ -45,7 +45,7 @@ for (const [engine, port] of [['chrome', 9543], ['firefox', 9643]]) test(`mixed 
       await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[1].click()");
       const note = await b.evaluate("document.querySelector('[data-testid=cvss-note]')");
       assert.ok(note);
-      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /score 9\.3 in CVSS 4\.0, but this report uses CVSS 3\.1\. Rescore it/);
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /Existing CVSS 4\.0 score: 9\.3\. CVSS 3\.1 assessment pending/);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-note]').dataset.kind"), 'error');
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-calculator]').open"), true, 'the calculator opens to rescore');
     });
@@ -53,7 +53,7 @@ for (const [engine, port] of [['chrome', 9543], ['firefox', 9643]]) test(`mixed 
     await t.test('Check & export lists it as blocking, and Word, Markdown and CSV exports are refused', async () => {
       await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent.includes('Check & export')).click()");
       assert.equal(await b.evaluate("document.querySelector('[data-testid=review-state]').textContent"), 'Cannot export yet');
-      assert.match(await b.evaluate("document.querySelector('.warnings li.fails').textContent"), /Scored in CVSS 4\.0, but this report uses CVSS 3\.1\. Rescore or clear it; until then, export will fail/);
+      assert.match(await b.evaluate("document.querySelector('.warnings li.fails').textContent"), /CVSS 3\.1 assessment pending \(it has a CVSS 4\.0 score\)\. Apply a CVSS 3\.1 assessment or clear its score; until then, export will fail/);
       for (const id of ['export', 'export-markdown', 'export-csv']) {
         await b.evaluate(`document.querySelector('[data-testid=${id}]').click()`);
         assert.ok(await b.waitFor("/Not exported: 1 finding is scored in another CVSS version/.test(document.querySelector('.status').textContent)"), `${id}: ${await status()}`);
