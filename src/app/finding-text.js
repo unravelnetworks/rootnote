@@ -66,9 +66,11 @@ export function findingBlock(plan, f, md, level, { handoff = true } = {}) {
   // So is the classification (v6), whatever the report shows.
   if (handoff && f.classification?.vulnerabilityType && !facts.some((k) => k.key === 'vulnerabilityType')) facts.push({ label: plan.labels.vulnerabilityType, value: f.classification.vulnerabilityType });
   if (handoff && f.classification?.cwe && !facts.some((k) => k.key === 'cwe')) facts.push({ label: plan.labels.cwe, value: f.classification.cwe });
+  // A finding copied out on its own leaves the report's label behind, so its score names its version.
+  const value = (k) => (handoff && k.versioned ? k.versioned : k.value);
   if (facts.length || handoff) out.push(facts.map((k) => (md
-    ? `- **${escapeMd(k.label)}:** ${escapeMd(k.value)}${k.detail ? ` (${codeSpan(k.detail)})` : ''}`
-    : `${k.label}: ${k.value}${k.detail ? ` (${k.detail})` : ''}`)).join('\n'));
+    ? `- **${escapeMd(k.label)}:** ${escapeMd(value(k))}${k.detail ? ` (${codeSpan(k.detail)})` : ''}`
+    : `${k.label}: ${value(k)}${k.detail ? ` (${k.detail})` : ''}`)).join('\n'));
 
   for (const s of f.sections) {
     const parts = [];

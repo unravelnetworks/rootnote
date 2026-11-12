@@ -375,18 +375,17 @@ export function migrateV5toV6(v5, { appVersion } = {}) {
   return { ...out, createdAt: v5.createdAt, savedAt: v5.savedAt, project, findings, images: v5.images.map((im) => ({ ...im })) };
 }
 
-/** Schema v7 empty project: v6 with new findings scored in CVSS 3.1 by default, and a
- * neutral score label, since every score in the report names its own version. */
+/** Schema v7 empty project: v6 with the report scored in CVSS 3.1 until the tester chooses
+ * CVSS 4.0. The score label keeps its v6 default; its version number follows the report. */
 export function createEmptyProjectV7(now = new Date()) {
   const p = createEmptyProjectV6(now);
   p.schemaVersion = 7;
   p.project.scoring.cvssVersion = '3.1';
-  p.project.labels.cvss = 'CVSS Base';
   return p;
 }
 
-/** Converts a validated schema v6 project to v7 without changing any content: new findings
- * keep opening the CVSS 3.1 calculator, and labels and vectors stay as they are. */
+/** Converts a validated schema v6 project to v7 without changing any content: the report uses
+ * CVSS 3.1, which every v6 vector already is, and labels and vectors stay as they are. */
 export function migrateV6toV7(v6, { appVersion } = {}) {
   const project = structuredClone(v6.project);
   project.scoring.cvssVersion = '3.1';
@@ -1023,7 +1022,8 @@ function validateSettingsV2(p, { err, line, text, label, bool, object, logos, v 
   }
   if (object(p.scoring, 'project.scoring', v >= 7 ? ['mode', 'cvssVersion'] : ['mode'])) {
     if (!SCORING_MODES.includes(p.scoring.mode)) err('project.scoring.mode', `must be one of ${SCORING_MODES.join(', ')}`);
-    // v7: which calculator a finding without a vector opens with. Never rewrites stored vectors.
+    // v7: the CVSS version the report uses. Validation never rewrites stored vectors; a vector in
+    // the other version is kept (to be rescored) and blocks a CVSS export until resolved.
     if (v >= 7 && !CVSS_VERSIONS.includes(p.scoring.cvssVersion)) err('project.scoring.cvssVersion', 'must be 3.1 or 4.0');
   }
   if (object(p.engagement, 'project.engagement', ['rows'])) {

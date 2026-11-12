@@ -2,7 +2,7 @@
 // Pure ESM: no DOM, canvas, docx, I/O, or application-state mutations.
 import { resolveFindingPrefix, REPORT_SECTIONS, FINDING_SECTIONS, REPORT_SECTIONS_V4, REPORT_SECTIONS_V5, FINDING_SECTIONS_V4, SCORING_MODES, LIMITS, savedSize, screenshotRefs, detailsTextLength, validateReferences,
   CUSTOM_LIMITS, CUSTOM_SECTION_ID, customKey, customTitleErrors, cweErrors, vulnerabilityTypeErrors } from '../app/project.js';
-import { parseCvss, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
+import { parseCvss, cvssLabel, reportCvssVersion, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
 import { reportDesign, ratingBadge, cvssBadge } from './design.js';
 export { resolveFindingPrefix } from '../app/project.js';
 
@@ -29,14 +29,15 @@ export function resolveEngagementValue(row, meta) {
   return txt(meta[row.source] ?? '');
 }
 
-function scoring(finding, mode, labels) {
+function scoring(finding, mode, labels, version) {
   const result = [];
   if (mode !== 'cvss') result.push({ key: 'rating', label: mode.startsWith('risk') ? labels.risk : labels.severity, value: finding.rating ?? labels.unscored, badge:ratingBadge(finding.rating) });
   if (mode.includes('cvss')) {
-    // Every score names its own CVSS version: a report may hold 3.1 and 4.0 findings, and the
-    // authored label cannot say which one a given score is.
+    // The report uses one CVSS version, named in the label. A score in another version (to be
+    // rescored before export) says which version it is; text copied out always does (versioned).
     const parsed = finding.cvss === null ? null : parseCvss(finding.cvss);
-    result.push({ key: 'cvss', label: labels.cvss, value: parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
+    const versioned = parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored;
+    result.push({ key: 'cvss', label: labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
   }
   return result;
 }
@@ -116,6 +117,8 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
   const p = project.project, mode = p.scoring.mode, v4=project.schemaVersion>=4;
   if (!SCORING_MODES.includes(mode)) throw new Error('Unsupported scoring mode.');
   const labels = Object.fromEntries(Object.entries(p.labels).map(([key, value]) => [key, txt(value)]));
+  const cvssVersionUsed = reportCvssVersion(project);
+  labels.cvss = cvssLabel(labels.cvss, cvssVersionUsed);
   // v6: the user's own sections. Each has exactly one report row,
   // labelled with its title; ids are short and Word-safe, so anchors fit a bookmark name.
   const v6=project.schemaVersion>=6, custom=new Map();
@@ -211,7 +214,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       return value.trim() ? [{ key: s.key, label: s.label, kind: 'text', text: value,
         format, literal:s.key === 'assets',keepTogether:shortSection(value,format,geometry.contentWidth,design,s.key==='assets') }] : [];
     });
-    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels);
+    const displayId=getDisplayFindingId(project,index), scores=scoring(finding,mode,labels,cvssVersionUsed);
     const keyFacts=[{key:'id',label:labels.idColumn,value:displayId,badge:null,detail:null},...scores.map(s=>({...s,detail:s.vector??null}))];
     const status=v4?{key:finding.status,label:txt(formatFindingStatus(finding.status,{notSet:labels.statusNotSet}))}:null;
     if(v4&&p.findingStatusDisplay.keyFacts)keyFacts.push({key:'status',label:labels.status,value:status.label,badge:null,detail:null});
@@ -225,7 +228,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
       anchor: 'finding_' + finding.id.replace('-', '_'), backToSummary: p.backToSummaryLinks && summaryEnabled,
       scoring:scores,keyFacts, sections,...(v4?{status}:{}),...(v6?{classification}:{}) };
   });
-  const scoreColumns = findings[0]?.scoring ?? scoring({ rating: null, cvss: null }, mode, labels);
+  const scoreColumns = findings[0]?.scoring ?? scoring({ rating: null, cvss: null }, mode, labels, cvssVersionUsed);
   const classifyColumn=v6&&summaryEnabled&&p.classificationDisplay.summaryColumn;
   // One combined column: "Type (CWE-n)", either one alone, or a dash when both are empty.
   const classified=f=>{const {cwe,vulnerabilityType:t}=f.classification;return t&&cwe?`${t} (${cwe})`:t||cwe||'\u2013';};

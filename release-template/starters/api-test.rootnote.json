@@ -170,7 +170,7 @@
       "titleColumn": "Finding",
       "severity": "Severity",
       "risk": "Risk",
-      "cvss": "CVSS Base",
+      "cvss": "CVSS 3.1 Base",
       "unscored": "Unscored",
       "figure": "Figure",
       "part": "part",

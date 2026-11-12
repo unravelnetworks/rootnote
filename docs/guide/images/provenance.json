@@ -1,6 +1,6 @@
 {
   "app": "dist/rootnote.html",
-  "appSha256": "8811e8e0d07ddb772a86a7726facd7f0031e9b6039ba5b5849acbb544823bc83",
+  "appSha256": "1301e05afb582c909691b3f90385e89fc36ffbf678b886f829a9faa1fa35f816",
   "viewport": "1280x1000@2",
   "theme": "light",
   "shots": [
@@ -62,7 +62,7 @@
       "name": "facts",
       "steps": "first finding: tag, key facts and CVSS calculator; Severity marked 1, CVSS calculator marked 2",
       "size": "589x377",
-      "sha256": "a74b5213c653895b34cf1372953298616158a594e42ccf8d3da4db14e4868b1e"
+      "sha256": "103ad71a85d8cba212bab01576909c515a40970316147166c8c4e779bb1ab9c1"
     },
     {
       "name": "blocks",
@@ -96,9 +96,9 @@
     },
     {
       "name": "sections",
-      "steps": "Sections & scoring: Scoring choice marked 1, New findings use (CVSS version) marked 2",
-      "size": "758x164",
-      "sha256": "936262d51f933f7eeb574438c171e4bf930f60972592c16ddd7d6fb2085a676e"
+      "steps": "Sections & scoring: Scoring choice marked 1, This report uses (CVSS version) marked 2",
+      "size": "758x145",
+      "sha256": "5ca1246bfd9e4e3504f8478d1a753b71825c1f8a8322714fc575b0ec54820120"
     },
     {
       "name": "section-list",

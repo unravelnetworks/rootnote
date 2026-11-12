@@ -105,7 +105,7 @@ The app's messages round these limits to "2 MB" and "25 MB".
 
 - An optional cover page with your logo and the client's logo, or a title page when the cover is off. The first enabled, nonempty report section starts on a new page after the cover/title block; later sections follow your configured order.
 - An optional table of contents, executive summary, rating explanation, engagement table, scope, your own sections, and a findings summary table with links to each finding.
-- Scoring: severity, risk or CVSS (3.1 or 4.0 Base, per finding), alone or with CVSS. Finding IDs use your engagement ID (for example `UNR-2026-014-3`).
+- Scoring: severity, risk or CVSS (3.1 or 4.0 Base, one version per report), alone or with CVSS. Finding IDs use your engagement ID (for example `UNR-2026-014-3`).
 - One section per finding, starting on a new page (a long finding continues over further pages), with its rating, status, vulnerability type and CWE. You choose which sections appear, their order and their names in **Sections & scoring**. Empty optional sections are left out:
   - affected assets, description, additional details, impact, threat, recommendation, references
   - additional details keep your text and screenshots in the order you placed them; screenshots are numbered and captioned

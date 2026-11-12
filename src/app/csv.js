@@ -6,7 +6,7 @@
 // hidden in the report are left empty.
 // UTF-8 with a byte-order mark and CRLF line ends, which Excel reads correctly.
 import { resolveFindingPrefix } from './project.js';
-import { parseCvss, formatFindingStatus } from '../scoring/index.js';
+import { parseCvss, cvssLabel, reportCvssVersion, formatFindingStatus } from '../scoring/index.js';
 
 // Also after leading spaces or invisible characters, and full-width look-alikes, since some
 // spreadsheet imports trim or fold them, including direction marks,
@@ -30,7 +30,7 @@ export function findingsCsv(doc) {
   const cell = (key, text) => (shown(key) ? text : '');
   const prefix = resolveFindingPrefix(p);
   const images = new Map(doc.images.map((im) => [im.id, im]));
-  const header = ['ID', 'Title', p.scoring.mode.startsWith('risk') ? labels.risk : labels.severity, `${labels.cvss} score`, `${labels.cvss} vector`,
+  const header = ['ID', 'Title', p.scoring.mode.startsWith('risk') ? labels.risk : labels.severity, `${cvssLabel(labels.cvss, reportCvssVersion(doc))} score`, `${cvssLabel(labels.cvss, reportCvssVersion(doc))} vector`,
     labels.status, labels.vulnerabilityType ?? 'Vulnerability type', labels.cwe ?? 'CWE', label('assets'), label('description'), label('details'),
     label('impact'), label('threat'), label('recommendation'), label('references')];
   const rows = doc.findings.map((f, i) => {

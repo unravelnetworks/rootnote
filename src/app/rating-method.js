@@ -20,7 +20,7 @@ function manual(name, risk) {
 
 function cvss(name, unscored) {
   return [
-    `${name} is the score calculated from the finding's CVSS Base metrics, shown with its version and vector. A report can use CVSS 3.1 and CVSS 4.0 side by side; the vector identifies which. A CVSS 4.0 Base score (also called CVSS-B) does not include Threat, Environmental or Supplemental metrics. Either way the score describes the issue's technical severity and does not include environmental or business factors. Scores map to these bands:`,
+    `${name} is the score calculated from the finding's CVSS Base metrics, shown with its vector. Every finding in this report is scored with the same CVSS version, named in the score label and at the start of each vector. A CVSS 4.0 Base score (also called CVSS-B) does not include Threat, Environmental or Supplemental metrics. Either way the score describes the issue's technical severity and does not include environmental or business factors. Scores map to these bands:`,
     '',
     '- Critical: 9.0 to 10.0',
     '- High: 7.0 to 8.9',

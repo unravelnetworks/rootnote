@@ -80,7 +80,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()");
       await b.evaluate("(() => { const s = document.querySelector('[data-testid=scoring-mode]'); s.value = 'cvss'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
       let d = await dot();
-      assert.equal(d.title, 'CVSS 3.1 Base: 9.8 (3.1)', 'a converted file keeps its label; the score names its version');
+      assert.equal(d.title, 'CVSS 3.1 Base: 9.8', 'the label names the report version; the score is plain');
       assert.equal(d.bg, 'rgb(123, 31, 162)', 'Critical band colour, not the hidden Low rating');
       assert.equal(await b.evaluate(`${snap}.findings[0].rating`), 'Low', 'hidden rating preserved');
       // A finding without a vector is Unscored, with no colour.
@@ -90,30 +90,61 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
     });
 
     const first = "document.querySelectorAll('.nav li.sortable .navitem')[0].click()";
-    const setVersion = (v) => `(() => { const s = document.querySelector('[data-testid=cvss-version]'); s.value = '${v}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`;
+    const sections = "[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()";
+    const setReport = (v) => `(() => { const s = document.querySelector('[data-testid=cvss-report-version]'); s.value = '${v}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`;
+    const typeVector = (v) => `(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+    const V31 = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H';
     const V40 = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
 
-    await t.test('switching a scored finding to CVSS 4.0 asks first; cancelling keeps the 3.1 vector', async () => {
+    await t.test('a report uses one version: a CVSS 4.0 vector pasted into a 3.1 report is refused', async () => {
       await b.evaluate(first);
-      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '3.1', 'the stored vector decides the version');
-      await b.evaluate(setVersion('4.0'));
-      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
-      assert.match(await b.evaluate("document.querySelector('dialog.confirm').textContent"), /does not convert scores between versions/);
-      await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
-      assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
-      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H');
-      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '3.1');
+      assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-version]')"), false, 'no per-finding version switch');
+      await b.evaluate(typeVector(V40));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31, 'the stored 3.1 vector stays');
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /This report uses CVSS 3\.1\. Enter a CVSS 3\.1 vector, or change the report's version in Sections & scoring/);
+      await b.evaluate(typeVector(V31));
     });
 
-    await t.test('agreeing removes the vector (Unscored, not 0) and shows the eleven CVSS 4.0 metrics', async () => {
-      await b.evaluate(setVersion('4.0'));
+    await t.test('switching the report to 4.0 asks and names how many scores are removed; Cancel changes nothing', async () => {
+      await b.evaluate(sections);
+      await b.evaluate(setReport('4.0'));
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      const text = await b.evaluate("document.querySelector('dialog.confirm').textContent");
+      assert.match(text, /Use CVSS 4\.0 for this report\? 1 finding has a score in another CVSS version\. It is deleted, because Rootnote cannot convert scores between versions/);
+      assert.match(text, /You can undo this right after/);
+      await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
+      assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
+      assert.equal(await b.evaluate(`${snap}.project.scoring.cvssVersion`), '3.1');
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31);
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-report-version]').value"), '3.1');
+    });
+
+    await t.test('agreeing switches the whole report: scores removed, label reads 4.0, 11 metrics; Undo brings it all back', async () => {
+      await b.evaluate(setReport('4.0'));
       assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
       await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
-      assert.ok(await b.waitFor(`${snap}.findings[0].cvss === null`));
+      assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '4.0'`));
+      assert.equal(await b.evaluate(`${snap}.findings.filter((f) => f.cvss).length`), 0);
+      assert.equal(await b.evaluate(`${snap}.project.labels.cvss`), 'CVSS 4.0 Base', 'the version number in the label follows');
+      assert.ok(await b.waitFor("!document.querySelector('[data-testid=undo-bar]').hidden"));
+      await b.evaluate(first);
       assert.ok(await b.waitFor("!!document.querySelector('[data-testid=cvss-AT]')"));
-      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-version]').value"), '4.0');
       assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-S]')"), false, 'no 3.1 Scope menu');
       assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-calculator] summary').textContent"), /CVSS 4\.0 calculator/);
+      await b.evaluate("document.querySelector('[data-testid=undo]').click()");
+      assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '3.1'`));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31, 'Undo restores the removed score');
+      assert.equal(await b.evaluate(`${snap}.project.labels.cvss`), 'CVSS 3.1 Base');
+    });
+
+    await t.test('in a 4.0 report, the calculator scores all eleven metrics', async () => {
+      await b.evaluate(sections);
+      await b.evaluate(setReport('4.0'));
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '4.0'`));
+      await b.evaluate(first);
+      assert.ok(await b.waitFor("!!document.querySelector('[data-testid=cvss-AT]')"));
       const metrics = { AV: 'N', AC: 'L', AT: 'N', PR: 'N', UI: 'N', VC: 'H', VI: 'H', VA: 'H', SC: 'N', SI: 'N', SA: 'N' };
       for (const [k, v] of Object.entries(metrics).slice(0, 10)) await b.evaluate(pick(k, v));
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), null, 'nothing stored until all eleven are chosen');
@@ -121,28 +152,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate(pick('SA', 'N'));
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40);
       assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /Score 9\.3 \(CVSS 4\.0 Base/);
-      const dot = await b.evaluate("document.querySelector('.nav [data-testid=rating-dot]').title");
-      assert.equal(dot, 'CVSS 3.1 Base: 9.3 (4.0)', 'the old label stays; the score names 4.0');
-    });
-
-    await t.test('pasting a 3.1 vector into a 4.0 finding switches it back; extra 4.0 metrics are refused', async () => {
-      await b.evaluate("(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:A'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
-      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-note]').dataset.kind"), 'error');
-      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V40, 'the stored vector stays');
-      await b.evaluate("(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
-      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]').value === '3.1'"));
-      assert.equal(await b.evaluate("!!document.querySelector('[data-testid=cvss-S]')"), true);
-    });
-
-    await t.test('the report default picks the calculator for a finding without a vector', async () => {
-      await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()");
-      await b.evaluate("(() => { const s = document.querySelector('[data-testid=cvss-default-version]'); s.value = '4.0'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
-      assert.equal(await b.evaluate(`${snap}.project.scoring.cvssVersion`), '4.0');
-      await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[1].click()");
-      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]')?.value === '4.0'"));
-      assert.equal(await b.evaluate(`${snap}.findings[1].cvss`), null);
-      await b.evaluate(first);
-      assert.ok(await b.waitFor("document.querySelector('[data-testid=cvss-version]')?.value === '3.1'"), 'a stored 3.1 vector is not reinterpreted');
+      assert.equal(await b.evaluate("document.querySelector('.nav [data-testid=rating-dot]').title"), 'CVSS 4.0 Base: 9.3', 'plain score; the label names the version');
     });
     assert.deepEqual(b.errors, [], 'page errors or CSP violations');
     assert.deepEqual(b.requests, [], 'network requests');

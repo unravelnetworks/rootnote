@@ -1,7 +1,10 @@
-// Pre-export warnings. They never block export and certify nothing. `go` names the view
-// that fixes each one: 'details', 'layout' or a finding id.
+// Pre-export warnings. They certify nothing. Most never block export; those whose text says
+// "export will fail" do (a missing screenshot, a CVSS score in another version than the
+// report's while CVSS is shown). `go` names the view that fixes each one: 'details', 'layout'
+// or a finding id.
 import { resolveFindingPrefix, screenshotRefs } from '../app/project.js';
 import { countPrompts } from '../app/starter-library.js';
+import { cvssVersion, reportCvssVersion } from '../scoring/index.js';
 
 const PLACEHOLDER = /\b(TODO|TBD|FIXME|lorem ipsum|XXX)\b|\[(insert|placeholder)[^\]]*\]/i;
 
@@ -36,6 +39,13 @@ export function checklist(doc) {
     if (!f.title.trim()) warnings.push({ where, go: f.id, text: 'Title is empty.' });
     if (mode !== 'cvss' && f.rating === null) warnings.push({ where, go: f.id, text: `${mode.startsWith('risk') ? p.labels.risk : p.labels.severity} is not set (exported as ${p.labels.unscored}).` });
     if (mode.endsWith('cvss') && f.cvss === null) warnings.push({ where, go: f.id, text: `No CVSS vector (exported as ${p.labels.unscored}).` });
+    // A score in another CVSS version than the report's must be rescored or cleared: the report
+    // would otherwise mix scores that cannot be compared. The CSV always holds CVSS scores.
+    if (f.cvss && cvssVersion(f.cvss) !== reportCvssVersion(doc)) {
+      warnings.push({ where, go: f.id, text: mode.endsWith('cvss')
+        ? `Scored in CVSS ${cvssVersion(f.cvss)}, but this report uses CVSS ${reportCvssVersion(doc)}. Rescore or clear it; until then, export will fail.`
+        : `Has a CVSS ${cvssVersion(f.cvss)} vector, but this report uses CVSS ${reportCvssVersion(doc)}. CVSS is hidden in the report; Findings as CSV is refused until you rescore or clear it.` });
+    }
     if (enabled('finding', 'assets') && !(f.affectedAssets || []).length) warnings.push({ where, go: f.id, text: `${label('assets')} is empty.` });
     for (const key of ['description', 'impact', 'recommendation']) {
       if (enabled('finding', key) && !(f[key] || '').trim()) warnings.push({ where, go: f.id, text: `${label(key)} is empty.` });

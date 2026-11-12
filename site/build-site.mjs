@@ -140,7 +140,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     ${fp}
   </div>
   <figure class="proof">
-    <img src="/assets/sample-summary.png" width="784" height="1109" alt="Findings summary page of a sample Word report made with Rootnote: eight findings with severity, CVSS score and its version, status and CWE classification, and counts per severity, CVSS band and status.">
+    <img src="/assets/sample-summary.png" width="784" height="1109" alt="Findings summary page of a sample Word report made with Rootnote: eight findings with severity, CVSS 3.1 Base score, status and CWE classification, and counts per severity, CVSS band and status.">
     <figcaption>A real page from the sample report (fictional client, synthetic evidence). In Rootnote, choose <strong>Open the sample</strong> to explore it.</figcaption>
   </figure>
 </section>

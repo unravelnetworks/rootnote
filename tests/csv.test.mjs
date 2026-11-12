@@ -43,7 +43,7 @@ test('the sample exports one row per finding, in order, with the report\'s words
   const rows = parse(findingsCsv(sample));
   assert.equal(rows.length, 1 + sample.findings.length);
   const [head, first] = rows;
-  assert.deepEqual(head.slice(0, 8), ['ID', 'Title', 'Severity', 'CVSS Base score', 'CVSS Base vector', 'Status', 'Vulnerability type', 'CWE']);
+  assert.deepEqual(head.slice(0, 8), ['ID', 'Title', 'Severity', 'CVSS 3.1 Base score', 'CVSS 3.1 Base vector', 'Status', 'Vulnerability type', 'CWE']);
   assert.ok(rows.every((r) => r.length === head.length), 'same number of columns in every row');
   assert.equal(first[0], 'UNR-2026-014-1');
   assert.equal(first[1], sample.findings[0].title);

@@ -55,6 +55,25 @@ export function cvssVersion(vector) {
   throw new Error('Enter a CVSS 3.1 or 4.0 Base vector.');
 }
 
+/** The CVSS version a report uses: project.scoring.cvssVersion (schema v7); files before v7
+ * only knew CVSS 3.1. Every finding is scored in this version. */
+export const reportCvssVersion = (doc) => doc?.project?.scoring?.cvssVersion ?? '3.1';
+
+/** The score label as shown: the authored label with its version number following the report
+ * ("CVSS 3.1 Base" reads "CVSS 4.0 Base" in a 4.0 report), or the version added in brackets
+ * when the label names none ("CVSS score (4.0)"). A stale label can never misstate the version. */
+export function cvssLabel(label, version) {
+  return /\b(3\.1|4\.0)\b/.test(label) ? label.replace(/\b(3\.1|4\.0)\b/g, version) : `${label} (${version})`;
+}
+
+/** Findings whose stored vector is not in the report's CVSS version (for example inserted from
+ * a library or kept from an older report). They must be rescored or cleared before a report
+ * with CVSS scores is exported; they are never converted or deleted silently. */
+export function cvssMismatches(doc) {
+  const version = reportCvssVersion(doc);
+  return doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== version);
+}
+
 /** A CVSS 3.1 or 4.0 Base vector, by its prefix: { version, vector, metrics, score }. Callers
  * that must accept only 3.1 (older file versions) keep using parseCvss31. */
 export function parseCvss(input) {
@@ -95,7 +114,7 @@ export function ratingCounts(doc) {
       if (f.rating !== null && !['Critical', 'High', 'Medium', 'Low', 'Informational'].includes(f.rating)) throw new Error('Invalid finding rating.');
       return f.rating;
     }));
-  if (mode.includes('cvss')) distributions.push(distribution('cvss', labels.cvss,
+  if (mode.includes('cvss')) distributions.push(distribution('cvss', cvssLabel(labels.cvss, reportCvssVersion(doc)),
     ['Critical', 'High', 'Medium', 'Low', 'None'], f => f.cvss === null ? null : cvssBand(parseCvss(f.cvss).score)));
   return { mode, total, distributions };
 }

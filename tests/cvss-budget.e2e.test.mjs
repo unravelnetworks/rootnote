@@ -67,32 +67,31 @@ test('a CVSS vector refused by the budget is not shown as stored', { skip: !inst
   writeFileSync(file, nearLimitProject());
   const b = await launch('chrome', 9541);
   const paste = (v) => `(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('blur', { bubbles: true })); })()`;
-  const state = `({ stored: ${snap}.findings[__I__].cvss, input: document.querySelector('[data-testid=cvss]').value, note: document.querySelector('[data-testid=cvss-note]').textContent, kind: document.querySelector('[data-testid=cvss-note]').dataset.kind, version: document.querySelector('[data-testid=cvss-version]').value })`;
+  const state = `({ stored: ${snap}.findings[__I__].cvss, input: document.querySelector('[data-testid=cvss]').value, note: document.querySelector('[data-testid=cvss-note]').textContent, kind: document.querySelector('[data-testid=cvss-note]').dataset.kind })`;
   try {
     await b.navigate(pathToFileURL(dist).href);
     assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
     await b.setFile('[data-testid=open-input]', file);
     assert.ok(await b.waitFor(`${snap}.findings.length === 20`, 90000));
 
-    await t.test('empty finding: the refused 4.0 vector is cleared from the box', async () => {
+    await t.test('empty finding: a 3.1 vector refused by the budget is cleared from the box', async () => {
       await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[0].click()");
-      await b.evaluate(paste(V40));
+      await b.evaluate(paste(V31));
       const s = await b.evaluate(state.replace('__I__', '0'));
       assert.equal(s.stored, null);
       assert.equal(s.input, '', 'the box shows what Save writes');
       assert.equal(s.kind, 'error');
       assert.match(s.note, /Not saved: the project is at its size limit\. Empty means not scored\./);
-      assert.equal(s.version, '3.1', 'the calculator stays on the report default');
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-AV]').value"), '', 'menus stay empty');
     });
 
-    await t.test('scored finding: a refused 4.0 vector leaves the 3.1 vector and its menus', async () => {
+    await t.test('scored finding: a vector in the other version is refused and the 3.1 vector stays', async () => {
       await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[1].click()");
       await b.evaluate(paste(V40));
       const s = await b.evaluate(state.replace('__I__', '1'));
       assert.equal(s.stored, V31);
-      assert.equal(s.input, V31);
-      assert.equal(s.version, '3.1');
-      assert.match(s.note, /Not saved: .*Score 9\.8 \(CVSS 3\.1 Base/);
+      assert.equal(s.kind, 'error', 'the refused text stays flagged, like any invalid vector');
+      assert.match(s.note, /This report uses CVSS 3\.1\..*Still stored: CVSS:3\.1\//);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-AV]').value"), 'N');
     });
     assert.deepEqual(b.errors, [], 'page errors or CSP violations');
