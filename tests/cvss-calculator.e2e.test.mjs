@@ -110,7 +110,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       await b.evaluate(setReport('4.0'));
       assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
       const text = await b.evaluate("document.querySelector('dialog.confirm').textContent");
-      assert.match(text, /Use CVSS 4\.0 for this report\? 1 finding has a CVSS 3\.1 score\. It is kept and marked CVSS 4\.0 pending\. Rootnote does not convert scores/);
+      assert.match(text, /Use CVSS 4\.0 for this report\? 1 finding has a CVSS 3\.1 score\. It is kept, and marked as pending a CVSS 4\.0 assessment\. Rootnote does not convert scores/);
       assert.match(text, /exports that show CVSS are blocked/);
       await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
       assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
@@ -138,6 +138,9 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`CVSS c
       assert.deepEqual(JSON.parse(menus), { AV: ['N', true], AC: ['', false], AT: ['', false], PR: ['N', true], UI: ['N', true], VC: ['H', true], VI: ['H', true], VA: ['H', true], SC: ['', false], SI: ['', false], SA: ['', false] });
       assert.match(await b.evaluate("document.querySelector('[data-testid=cvss-note]').textContent"), /Existing CVSS 3\.1 score: 9\.8\. CVSS 4\.0 assessment pending\. 6 of 11 metrics chosen\. Menus marked "suggested"/);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-apply]').disabled"), true);
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=cvss-apply-reason]').textContent"), 'Still to choose: Attack complexity, Attack requirements, Subsequent system confidentiality, Subsequent system integrity, Subsequent system availability.');
+      // The label names the version of the stored score, in the editor and in the live page.
+      assert.match(await b.evaluate("document.querySelector('[data-testid=cvss]').closest('label, .field').textContent"), /CVSS 3\.1 Base \(CVSS 4\.0 pending\)/);
       await b.evaluate("document.querySelector('[data-testid=undo]').click()");
       assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '3.1'`));
       assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31);

@@ -100,3 +100,55 @@ test('a CVSS vector refused by the budget is not shown as stored', { skip: !inst
     await b.close();
   }
 });
+
+// Over the limit (recovery), Undo is not offered: clearing or replacing a pending finding's
+// old score asks first, and Cancel keeps it (Codex 157: a clear that ended recovery offered
+// an Undo that could not fit).
+test('in recovery, clearing a pending score asks first and offers no Undo', { skip: !installed('chrome') && 'chrome not installed', timeout: 180000 }, async (t) => {
+  const p = JSON.parse(nearLimitProject());
+  p.findings[0].cvss = V31;
+  p.schemaVersion = 6;
+  delete p.project.scoring.cvssVersion;
+  const need = LIMITS.fileBytes - 1 - Buffer.byteLength(JSON.stringify(p));
+  if (need < 0) p.findings[0].description = p.findings[0].description.slice(-need); else p.project.executiveSummary = 'x'.repeat(need);
+  const raw = JSON.stringify(p);
+  assert.equal(Buffer.byteLength(raw), LIMITS.fileBytes - 1);
+  mkdirSync(here('./out'), { recursive: true });
+  const file = here('./out/cvss-recovery.json');
+  writeFileSync(file, raw);
+  const b = await launch('chrome', 9547);
+  const clear = "(() => { const i = document.querySelector('[data-testid=cvss]'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); })()";
+  try {
+    await b.navigate(pathToFileURL(dist).href);
+    assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
+    await b.setFile('[data-testid=open-input]', file);
+    assert.ok(await b.waitFor(`${snap}.findings.length === 20`, 90000));
+    assert.equal(await b.evaluate("!document.querySelector('.recovery').hidden"), true, 'migration takes it over the limit');
+    await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent === 'Sections & scoring').click()");
+    await b.evaluate("(() => { const s = document.querySelector('[data-testid=cvss-report-version]'); s.value = '4.0'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+    assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+    await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+    assert.ok(await b.waitFor(`${snap}.project.scoring.cvssVersion === '4.0'`));
+    await b.evaluate("document.querySelectorAll('.nav li.sortable .navitem')[0].click()");
+
+    await t.test('Cancel keeps the old score', async () => {
+      await b.evaluate(clear);
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      assert.match(await b.evaluate("document.querySelector('dialog.confirm').textContent"), /Clear the CVSS 3\.1 score of "Budget finding 1"\? This cannot be undone while the project is over the size limit/);
+      await b.evaluate("document.querySelector('dialog.confirm button.secondary').click()");
+      assert.ok(await b.waitFor("!document.querySelector('dialog.confirm')"));
+      assert.equal(await b.evaluate(`${snap}.findings[0].cvss`), V31);
+    });
+
+    await t.test('confirming clears it, and no Undo is offered', async () => {
+      await b.evaluate(clear);
+      assert.ok(await b.waitFor("!!document.querySelector('dialog.confirm')"));
+      await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings[0].cvss === null`));
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=undo-bar]').hidden"), true);
+    });
+    assert.deepEqual(b.errors, [], 'page errors or CSP violations');
+  } finally {
+    await b.close();
+  }
+});

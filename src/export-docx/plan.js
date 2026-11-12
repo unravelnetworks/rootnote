@@ -37,7 +37,7 @@ function scoring(finding, mode, labels, version, authoredCvss = labels.cvss) {
     // rescored before export) says which version it is; text copied out always does (versioned).
     const parsed = finding.cvss === null ? null : parseCvss(finding.cvss);
     const versioned = parsed ? `${parsed.score.toFixed(1)} (${parsed.version})` : labels.unscored;
-    result.push({ key: 'cvss', label: labels.cvss, ownLabel: parsed ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
+    result.push({ key: 'cvss', label: parsed && parsed.version !== version ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, ownLabel: parsed ? cvssLabel(authoredCvss, parsed.version) : labels.cvss, value: parsed && parsed.version === version ? parsed.score.toFixed(1) : versioned, versioned, mismatch: !!parsed && parsed.version !== version, score: parsed?.score ?? null, version: parsed?.version ?? null, vector: parsed?.vector ?? null, badge:cvssBadge(parsed?.score ?? null) });
   }
   return result;
 }
@@ -233,7 +233,7 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
   // One combined column: "Type (CWE-n)", either one alone, or a dash when both are empty.
   const classified=f=>{const {cwe,vulnerabilityType:t}=f.classification;return t&&cwe?`${t} (${cwe})`:t||cwe||'\u2013';};
   const summary = { enabled: summaryEnabled, anchor: 'report_summary', ratingCounts: ratingCounts(project),
-    columns: [{ key: 'id', label: labels.idColumn }, { key: 'title', label: labels.titleColumn }, ...scoreColumns.map(s => ({ key: s.key, label: s.label })),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?[{key:'status',label:labels.status}]:[]),...(classifyColumn?[{key:'classification',label:labels.classification}]:[])],
+    columns: [{ key: 'id', label: labels.idColumn }, { key: 'title', label: labels.titleColumn }, ...scoreColumns.map(s => ({ key: s.key, label: s.key === 'cvss' ? labels.cvss : s.label })),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?[{key:'status',label:labels.status}]:[]),...(classifyColumn?[{key:'classification',label:labels.classification}]:[])],
     rows: findings.map(f => ({ id: f.id, displayId: f.displayId, title: f.title, anchor: f.anchor,
       badges:Object.fromEntries(f.scoring.map(s=>[s.key,s.badge])),
       values: { id: f.displayId, title: f.title, ...Object.fromEntries(f.scoring.map(s => [s.key, s.value])),...(v4&&summaryEnabled&&p.findingStatusDisplay.summaryColumn?{status:f.status.label}:{}),...(classifyColumn?{classification:classified(f)}:{}) } })),

@@ -104,7 +104,7 @@ export function cvssExportProblem(doc, withCvss = doc.project.scoring.mode.inclu
 }
 
 /** Suggestions for scoring a finding in `target` from its vector in the other CVSS version:
- * only metrics whose meaning carries over (Codex/Marketing 156; FIRST CVSS 4.0 user guide).
+ * only metrics whose meaning carries over (FIRST CVSS 4.0 specification and user guide).
  * They are a draft for the tester to review, never a score: Rootnote does not convert.
  * 3.1 to 4.0: Attack Vector and Privileges Required; User Interaction only when it was None;
  * Confidentiality, Integrity and Availability as the vulnerable system's only when Scope was

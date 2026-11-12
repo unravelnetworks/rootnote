@@ -1273,10 +1273,16 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         : f.cvss ? 'Pick the metrics. The report\'s CVSS version is set in Sections & scoring' : 'Not scored yet: pick the metrics to score this finding';
     };
     const applyButton = h('button', { type: 'button', 'data-testid': 'cvss-apply', disabled: true, onclick: () => { const d = draftVector(); if (d) applyCvss(f, d.vector, version); } }, `Apply CVSS ${version}`);
+    // Why Apply is not available yet: the metrics still to choose (shown with a dash).
+    const applyReason = h('span', { class: 'hint', 'data-testid': 'cvss-apply-reason' });
     const showCvssNote = (error = typedError, incomplete = false) => {
       typedError = error;
       syncHint();
       applyButton.disabled = !(old && draftVector());
+      if (old) {
+        const left = metricsFor.filter(([k]) => !picked[k]).map(([, name]) => name);
+        applyReason.textContent = left.length ? `Still to choose: ${left.join(', ')}.` : '';
+      }
       cvssNote.textContent = error
         ? `${error} Not saved until it is valid, for example ${CVSS_EXAMPLE[version]}. ${f.cvss ? `Still stored: ${f.cvss}.` : ''}`.trim()
         : old
@@ -1356,10 +1362,11 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       version === '4.0' ? h('p', { class: 'hint' }, 'Base metrics only (CVSS-B). Threat, Environmental and Supplemental metrics are not supported.') : null,
       old ? h('p', { class: 'hint', 'data-testid': 'cvss-previous' }, `Previous assessment, CVSS ${old.version}: ${old.score.toFixed(1)}, ${old.vector}`) : null,
       h('div', { class: 'cvss-grid' }, ...selects),
-      old ? h('div', { class: 'row' }, applyButton) : null);
+      old ? h('div', { class: 'row' }, applyButton, applyReason) : null);
     return [
       field(showRating ? ratingLabel : `${ratingLabel} (hidden by the scoring setting)`, rating),
-      field(showCvss ? labels.cvss : `${labels.cvss} vector (hidden by the scoring setting)`, cvss, cvssNote),
+      // A pending finding's box holds its old score: the label names that version.
+      field(old ? `${cvssLabel(labels.cvss, old.version)} (CVSS ${version} pending)` : showCvss ? labels.cvss : `${labels.cvss} vector (hidden by the scoring setting)`, cvss, cvssNote),
       calculator,
     ];
   }
@@ -1392,18 +1399,19 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const pending = doc.findings.filter((f) => f.cvss && cvssVersion(f.cvss) !== next).length;
     if (pending) {
       const one = pending === 1;
-      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${one ? `1 finding has a CVSS ${from} score. It is kept and marked CVSS ${next} pending.` : `${pending} findings have CVSS ${from} scores. They are kept and marked CVSS ${next} pending.`} Rootnote does not convert scores: in each finding, review the suggested metrics, choose the rest and apply a CVSS ${next} assessment. Until then, exports that show CVSS are blocked.`, `Use CVSS ${next}`);
+      const ok = await confirmDialog(`Use CVSS ${next} for this report? ${one ? `1 finding has a CVSS ${from} score. It is kept, and marked as pending a CVSS ${next} assessment.` : `${pending} findings have CVSS ${from} scores. They are kept, and each one is marked as pending a CVSS ${next} assessment.`} Rootnote does not convert scores: in each finding, review the suggested metrics, choose the rest and apply a CVSS ${next} assessment. Until then, exports that show CVSS are blocked.`, `Use CVSS ${next}`);
       if (!ok || generation !== before.gen || revision !== before.rev || doc !== before.doc) { select.value = from; return; }
     }
     const label = p.labels.cvss;
     const newLabel = switchedCvssLabel(label, next);
+    const undoable = undoAvailable(); // decided before the change, as for every removal
     const apply = () => { p.scoring.cvssVersion = next; p.labels.cvss = newLabel; };
     const revert = () => { p.scoring.cvssVersion = from; p.labels.cvss = label; };
     if (!change(apply, revert)) { select.value = from; return; }
     renderNav();
     render();
     say(`This report now uses CVSS ${next}.${pending ? ` ${pending} finding${pending === 1 ? ' is' : 's are'} pending a CVSS ${next} assessment; Check & export lists ${pending === 1 ? 'it' : 'them'}.` : ''}`);
-    if (pending && undoAvailable()) {
+    if (pending && undoable) {
       offerUndo(`Switched the report to CVSS ${next}.`,
         () => (change(revert, apply) ? true : BUDGET_REASON), () => { renderNav(); render(); say(`This report uses CVSS ${from} again.`); });
     }
@@ -1424,15 +1432,23 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     return byDoc.get(key);
   }
   /** Replaces a pending finding's score in the other version with `vector` (or clears it),
-   * as one change with Undo. */
-  function applyCvss(f, vector, version) {
+   * as one change with Undo. Whether Undo is offered is decided before the change (a change
+   * can end the over-budget recovery state, where a restore could not fit); without Undo it
+   * asks first, and does nothing if the project changed while the question was open. */
+  async function applyCvss(f, vector, version) {
     const previous = f.cvss;
     const was = cvssVersion(previous);
+    const undoable = undoAvailable();
+    if (!undoable) {
+      const before = { doc, gen: generation, rev: revision };
+      const ok = await confirmDialog(`${vector ? `Replace the CVSS ${was} score of "${short(f.title || '(untitled)')}" with this CVSS ${version} assessment` : `Clear the CVSS ${was} score of "${short(f.title || '(untitled)')}"`}? This cannot be undone while the project is over the size limit.`, vector ? 'Replace' : 'Clear');
+      if (!ok || doc !== before.doc || generation !== before.gen || revision !== before.rev || findingById(f.id) !== f || f.cvss !== previous) { render(); return; }
+    }
     if (!change(() => { f.cvss = vector; }, () => { f.cvss = previous; })) { render(); return; }
     renderNav();
     render();
     say(vector ? `Applied the CVSS ${version} assessment; it replaces the CVSS ${was} score.` : `Cleared the CVSS ${was} score.`);
-    if (undoAvailable()) {
+    if (undoable) {
       offerUndo(vector ? `Applied CVSS ${version} to "${short(f.title || '(untitled)')}".` : `Cleared the CVSS ${was} score of "${short(f.title || '(untitled)')}".`, () => {
         const g = findingById(f.id);
         if (!g) return 'the finding no longer exists.';

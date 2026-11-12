@@ -258,3 +258,13 @@ test('switch suggestions: only metrics whose meaning carries over, never a whole
     assert.ok(n < (target === '4.0' ? 11 : 8), 'a suggestion is never a complete vector');
   }
 });
+
+test('a pending finding key fact names the version of its score; the summary column keeps the report version', () => {
+  const d = mixed();
+  d.project.scoring.cvssVersion = '4.0';
+  d.project.labels.cvss = 'CVSS 4.0 Base';
+  const plan = createReportPlan(d);
+  assert.equal(plan.findings[0].scoring.find((s) => s.key === 'cvss').label, 'CVSS 3.1 Base');
+  assert.equal(plan.findings[1].scoring.find((s) => s.key === 'cvss').label, 'CVSS 4.0 Base');
+  assert.equal(plan.summary.columns.find((c) => c.key === 'cvss').label, 'CVSS 4.0 Base');
+});
