@@ -506,6 +506,57 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     clearTimeout(liveTimer);
     liveTimer = setTimeout(drawLive, 400);
   }
+  // The live page lays out only the shown finding (renderPreview `only`). Page numbers come
+  // from remembered page counts of the front matter and of every other finding, keyed by the
+  // content that decides them, so editing one finding recounts only that finding. Missing
+  // counts are filled in small slices after the live page is shown; until then it shows the
+  // finding without page numbers. Laying out the whole report on every keystroke pause and
+  // every finding change took seconds in large reports.
+  const pageCounts = new Map(); // content key -> body pages
+  let countJob = null;
+  const findingCountKey = (plan, k) => JSON.stringify([plan.findings[k], k === 0, plan.geometry, plan.design, plan.labels, plan.running, plan.findingsAnchor]);
+  const frontCountKey = (plan) => JSON.stringify({ ...plan, findings: plan.findings.length, imageAssets: plan.imageAssets.map((a) => [a.id, a.width, a.height]) });
+  function countPages(plan, options) {
+    const tmp = h('div', { class: 'pv live-pv', 'aria-hidden': 'true', style: 'position: absolute; left: -100000px; top: 0; visibility: hidden' });
+    document.body.append(tmp);
+    try { return renderPreview(tmp, plan, { images: new Map(doc.images.map((im) => [im.id, im])), onTallMode: () => {}, imagesFor: new Set(), ...options }).bodyPages; }
+    finally { tmp.remove(); }
+  }
+  /** Body pages before finding k and in the whole report, given finding k's own count, or
+   * null while another count is missing. */
+  function pageNumbers(plan, k, own) {
+    const front = pageCounts.get(frontCountKey(plan));
+    if (front === undefined) return null;
+    let before = front, total = front + own;
+    for (let j = 0; j < plan.findings.length; j++) {
+      if (j === k) continue;
+      const n = pageCounts.get(findingCountKey(plan, j));
+      if (n === undefined) return null;
+      if (j < k) before += n;
+      total += n;
+    }
+    return { before, total };
+  }
+  // Counts what is missing, one finding per task, then redraws once with page numbers.
+  function scheduleCounts(plan, gen, rev) {
+    clearTimeout(countJob);
+    const jobs = [];
+    if (!pageCounts.has(frontCountKey(plan))) jobs.push(() => pageCounts.set(frontCountKey(plan), countPages(plan, { frontOnly: true })));
+    plan.findings.forEach((x, j) => { if (!pageCounts.has(findingCountKey(plan, j))) jobs.push(() => pageCounts.set(findingCountKey(plan, j), countPages(plan, { only: { findingId: x.id, bodyOffset: null } }))); });
+    if (!jobs.length) return;
+    const next = () => {
+      if (gen !== generation || rev !== revision) return; // a newer draw schedules its own counts
+      jobs.shift()();
+      if (jobs.length) countJob = setTimeout(next, 0);
+      else {
+        // Keep only the counts the current report uses.
+        const keep = new Set([frontCountKey(plan), ...plan.findings.map((_, j) => findingCountKey(plan, j))]);
+        for (const key of [...pageCounts.keys()]) if (!keep.has(key)) pageCounts.delete(key);
+        drawLive();
+      }
+    };
+    countJob = setTimeout(next, 0);
+  }
   function drawLive() {
     clearTimeout(liveTimer);
     const f = liveFinding();
@@ -519,36 +570,39 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const top = key === liveKey ? live.scrollTop : 0;
     liveKey = key;
     live.querySelector('.live-body')?.remove();
-    if (!plan) { liveHead.querySelector('[data-testid=live-where]').textContent = ''; live.append(h('p', { class: 'hint live-body' }, reason)); return; }
-    const head = liveHead;
+    const where = liveHead.querySelector('[data-testid=live-where]');
+    if (!plan) { where.textContent = ''; live.append(h('p', { class: 'hint live-body' }, reason)); return; }
+    const k = plan.findings.findIndex((x) => x.id === f.id);
+    if (k < 0) { where.textContent = '· This finding is not in the report'; live.append(h('p', { class: 'hint live-body' }, 'This finding is not in the report.')); return; }
     const host = h('div', { class: 'pv live-pv live-body' });
     live.append(host);
-    // Only this finding's screenshots are drawn: the other pages are hidden, and drawing every
-    // screenshot of a large report made each redraw take seconds.
     const shown = new Set();
-    JSON.stringify(plan.findings.find((x) => x.id === f.id) ?? {}, (k, v) => { if (k === 'imageId' && typeof v === 'string') shown.add(v); return v; });
-    renderPreview(host, plan, { images: new Map(doc.images.map((im) => [im.id, im])), onTallMode: () => {}, imagesFor: shown });
+    JSON.stringify(plan.findings[k], (key2, v) => { if (key2 === 'imageId' && typeof v === 'string') shown.add(v); return v; });
+    const { bodyPages } = renderPreview(host, plan, { images: new Map(doc.images.map((im) => [im.id, im])), onTallMode: () => {}, imagesFor: shown,
+      only: { findingId: f.id, bodyOffset: null } });
+    // The page count comes from a layout off screen at the page's real size (the pane may be
+    // hidden on a narrow window, where nothing can be measured); the footers are numbered from
+    // it and the remembered counts of everything else.
+    const ownKey = findingCountKey(plan, k);
+    let own = pageCounts.get(ownKey);
+    if (own === undefined) { own = live.offsetParent ? bodyPages : countPages(plan, { only: { findingId: f.id, bodyOffset: null } }); pageCounts.set(ownKey, own); }
+    const numbers = pageNumbers(plan, k, own);
+    if (numbers) host.querySelectorAll('.pv-running-footer > span:last-child').forEach((sp, i) => { sp.textContent = `${plan.labels.page} ${numbers.before + i + 1} ${plan.labels.pageOf} ${numbers.total}`; });
     // Read-only: no screenshot layout controls and no approximation banner here (the header says where it is).
     host.querySelectorAll('.pv-control, .pv-note').forEach((e) => e.remove());
-    const pages = [...host.querySelectorAll('.pv-page')];
-    const pageOf = (el) => (el ? pages.indexOf(el.closest('.pv-page')) : -1);
-    const k = plan.findings.findIndex((x) => x.id === f.id);
-    const first = pageOf(host.querySelector(`#pv-${plan.findings[k]?.anchor}`));
-    const next = plan.findings[k + 1] ? pageOf(host.querySelector(`#pv-${plan.findings[k + 1].anchor}`)) : pages.length;
-    const last = Math.max(first, next - 1);
-    const width = pages[0]?.getBoundingClientRect().width || 1; // measured before pages are hidden
-    pages.forEach((pg, n) => { pg.hidden = n < first || n > last; });
     host.querySelectorAll('[id^=pv-]').forEach((e) => e.removeAttribute('id')); // ids belong to the full Preview
     host.querySelectorAll('a.pv-link').forEach((a) => { a.removeAttribute('href'); a.onclick = null; });
+    const width = host.querySelector('.pv-page')?.getBoundingClientRect().width || 1;
     // Numbered as the report's footer numbers them: body pages only, not the cover.
-    const body = pages.filter((pg) => pg.classList.contains('pv-page-body'));
-    const no = (n) => body.indexOf(pages[n]) + 1;
-    const where = head.querySelector('[data-testid=live-where]');
-    where.textContent = first < 0 ? '· This finding is not in the report' : `· ${doc.project.paperSize} · page ${no(first)}${last > first ? `–${no(last)}` : ''} of ${body.length}`;
+    const first = (numbers?.before ?? 0) + 1, last = first + own - 1;
+    where.textContent = numbers
+      ? `· ${doc.project.paperSize} · page ${first}${last > first ? `–${last}` : ''} of ${numbers.total}`
+      : `· ${doc.project.paperSize} · counting pages…`;
     // Fit the page width to the pane.
     host.style.zoom = String(Math.min(1, (live.clientWidth - 24) / width));
     live.scrollTop = top;
     markLive(false);
+    if (!numbers) scheduleCounts(plan, generation, revision);
   }
   // What the cursor is in (a block, a screenshot or a finding section) is marked on the live
   // page, and brought into view there when it changes (agreed mockup).
