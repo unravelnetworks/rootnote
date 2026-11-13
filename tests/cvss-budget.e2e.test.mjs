@@ -9,11 +9,13 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createEmptyProject, defaultFormats, LIMITS } from '../src/app/project.js';
 import { APP_VERSION } from '../src/app/version.js';
+import { TEST_BUDGET_DIST, TEST_FILE_BYTES } from './harness/test-budget.mjs';
 
 const require = createRequire(import.meta.url);
 const { launch, installed } = require('./harness/driver.cjs');
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const dist = here('../dist/rootnote.html');
+// The test-only budget build (25 MiB project limit): see tests/harness/test-budget.mjs.
+const dist = TEST_BUDGET_DIST;
 const snap = 'window.__fieldnote.snapshot()';
 const V31 = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H';
 const V40 = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N';
@@ -50,7 +52,7 @@ function nearLimitProject() {
     evidence: i ? [] : p.images.map((im) => im.id), references: [], cwe: '', vulnerabilityType: '' }));
   p.project.nextFindingNumber = 21;
   p.project.nextImageNumber = 10;
-  let need = LIMITS.fileBytes - 16 - Buffer.byteLength(JSON.stringify(p));
+  let need = TEST_FILE_BYTES - 16 - Buffer.byteLength(JSON.stringify(p));
   for (const f of p.findings) for (const k of ['description', 'impact', 'threat', 'recommendation']) {
     const n = Math.min(need, LIMITS.text);
     f[k] = 'x'.repeat(n);
@@ -109,10 +111,10 @@ test('in recovery, clearing a pending score asks first and offers no Undo', { sk
   p.findings[0].cvss = V31;
   p.schemaVersion = 6;
   delete p.project.scoring.cvssVersion;
-  const need = LIMITS.fileBytes - 1 - Buffer.byteLength(JSON.stringify(p));
+  const need = TEST_FILE_BYTES - 1 - Buffer.byteLength(JSON.stringify(p));
   if (need < 0) p.findings[0].description = p.findings[0].description.slice(-need); else p.project.executiveSummary = 'x'.repeat(need);
   const raw = JSON.stringify(p);
-  assert.equal(Buffer.byteLength(raw), LIMITS.fileBytes - 1);
+  assert.equal(Buffer.byteLength(raw), TEST_FILE_BYTES - 1);
   mkdirSync(here('./out'), { recursive: true });
   const file = here('./out/cvss-recovery.json');
   writeFileSync(file, raw);

@@ -12,6 +12,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "pretest": "node scripts/build-test-budget.mjs",
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.mjs\"",
     "release": "node scripts/release.mjs",
     "site": "node site/build-site.mjs",

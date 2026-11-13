@@ -10,11 +10,13 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createEmptyProject, createEmptyProjectV4, defaultFormats, validateProjectFile, LIMITS } from '../src/app/project.js';
 import { APP_VERSION } from '../src/app/version.js';
+import { TEST_BUDGET_DIST, TEST_FILE_BYTES } from './harness/test-budget.mjs';
 
 const require = createRequire(import.meta.url);
 const { launch, installed } = require('./harness/driver.cjs');
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const dist = here('../dist/rootnote.html');
+// The test-only budget build (25 MiB project limit): see tests/harness/test-budget.mjs.
+const dist = TEST_BUDGET_DIST;
 const out = here('./out/references-budget');
 const snap = 'window.__fieldnote.snapshot()';
 
@@ -52,7 +54,7 @@ function nearLimitProject(make = createEmptyProject) {
     ...(p.schemaVersion >= 6 ? { cwe: '', vulnerabilityType: '' } : {}) }));
   p.project.nextFindingNumber = 21;
   p.project.nextImageNumber = 10;
-  let need = LIMITS.fileBytes - 16 - Buffer.byteLength(JSON.stringify(p));
+  let need = TEST_FILE_BYTES - 16 - Buffer.byteLength(JSON.stringify(p));
   for (const f of p.findings) for (const k of ['description', 'impact', 'threat', 'recommendation']) {
     const n = Math.min(need, LIMITS.text);
     f[k] = 'x'.repeat(n);
@@ -67,7 +69,7 @@ for (const [engine, port] of [['chrome', 9599], ['firefox', 9699]]) test(`refere
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   const raw = nearLimitProject();
-  assert.equal(Buffer.byteLength(raw), LIMITS.fileBytes - 16);
+  assert.equal(Buffer.byteLength(raw), TEST_FILE_BYTES - 16);
   assert.ok((await validateProjectFile(raw, Buffer.byteLength(raw))).ok);
   const file = join(out, 'near-limit.rootnote.json');
   writeFileSync(file, raw);
@@ -84,7 +86,7 @@ for (const [engine, port] of [['chrome', 9599], ['firefox', 9699]]) test(`refere
       await t.test(`a refused ${key} edit shows the stored value again`, async () => {
         await b.evaluate(`(() => { const e = document.querySelector('${sel}'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
         assert.equal(await b.evaluate(`${snap}.findings[0].references[0].${key}`), stored);
-        assert.match(await b.evaluate("document.querySelector('.status').textContent"), /25 MB limit/);
+        assert.match(await b.evaluate("document.querySelector('.status').textContent"), /would take the project over 25 MB/);
         assert.equal(await b.evaluate(`document.querySelector('${sel}').value`), stored, 'the field matches what Save writes');
       });
     }
@@ -94,7 +96,7 @@ for (const [engine, port] of [['chrome', 9599], ['firefox', 9699]]) test(`refere
       await b.evaluate(`(() => { const i = document.querySelector('[data-testid=new-reference-title]'); i.value = ${JSON.stringify(title)}; })()`);
       await b.evaluate("document.querySelector('[data-testid=add-reference]').click()");
       assert.equal(await b.evaluate(`${snap}.findings[0].references.length`), 1);
-      assert.match(await b.evaluate("document.querySelector('.status').textContent"), /25 MB limit/);
+      assert.match(await b.evaluate("document.querySelector('.status').textContent"), /would take the project over 25 MB/);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=new-reference-title]').value"), title);
       const saved = JSON.stringify(await b.evaluate(snap));
       assert.ok((await validateProjectFile(saved, Buffer.byteLength(saved))).ok);
@@ -120,7 +122,7 @@ for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`copy a
     assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
     await b.setFile('[data-testid=open-input]', file);
     assert.ok(await b.waitFor(`${snap}.findings.length === 20`, 90000));
-    assert.equal(await b.evaluate(`${snap}.schemaVersion`), 7);
+    assert.equal(await b.evaluate(`${snap}.schemaVersion`), 8);
     await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent.includes('Budget finding 1')).click()");
     await b.evaluate("document.querySelector('[data-testid=copy-finding]').click()");
     assert.ok(await b.waitFor("!!document.querySelector('[data-testid=copy-dialog][open]')"));

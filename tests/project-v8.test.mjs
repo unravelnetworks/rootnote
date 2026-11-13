@@ -146,7 +146,7 @@ test('an older file is held to its own bounds: it never becomes valid by convert
   assert.throws(() => createReportPlan(big7), /format 7 holds at most 20/);
 });
 
-test('a real v8 file of exactly 268,435,456 bytes opens; one byte more (multibyte text) is refused', async () => {
+test('a real v8 file of exactly 268,435,456 bytes opens; one byte more is refused, and so is one 3-byte character more', async () => {
   // About 95 large stored PNGs (~2 MiB each) and text padding up to the cap.
   const big = png(980, 700, true);
   assert.ok(big.length <= LIMITS.imageBytes, `${big.length}`);
@@ -174,8 +174,15 @@ test('a real v8 file of exactly 268,435,456 bytes opens; one byte more (multibyt
   const raw = json(d);
   const r = await openProjectFile(raw, Buffer.byteLength(raw), { appVersion: '0.3.0' });
   assert.equal(r.ok, true, r.errors?.join('; '));
-  // One more 3-byte character: the saved form is over the cap and the file is refused.
-  d.findings[149].title += '€';
+  // One byte more: the saved form is over the cap and the file is refused.
+  d.findings[149].title += 'a';
+  assert.equal(savedSize(d), LIMITS.fileBytes + 1);
+  const raw1 = json(d);
+  const r1 = await openProjectFile(raw1, Buffer.byteLength(raw1), { appVersion: '0.3.0' });
+  assert.equal(r1.ok, false);
+  assert.match(r1.errors[0], /limit is 268435456 \(256 MB\)/);
+  // A 3-byte character instead of that byte: also refused.
+  d.findings[149].title = d.findings[149].title.slice(0, -1) + '€';
   const raw2 = json(d);
   const r2 = await openProjectFile(raw2, Buffer.byteLength(raw2), { appVersion: '0.3.0' });
   assert.equal(r2.ok, false);

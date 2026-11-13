@@ -3082,10 +3082,12 @@ Third-party software notices
     const gen = generation;
     const rev = revision;
     const epoch = draftState.epoch;
-    const json = serialize(new Date().toISOString());
-    const bytes = new TextEncoder().encode(json).length;
     draftState.busy = true;
     try {
+      // Inside the try: a large project can fail to serialize (memory); that pauses drafts with
+      // the same message as a failed write, and the last kept draft stays.
+      const json = serialize(new Date().toISOString());
+      const bytes = new TextEncoder().encode(json).length;
       // A draft is stored only if it would open in this app as it is.
       // Screenshots this session already decoded are not decoded again (decodedForDrafts).
       const check = await openProjectFile(json, bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts() });
