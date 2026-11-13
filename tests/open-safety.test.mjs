@@ -124,3 +124,33 @@ test('the Word export keeps JPEG screenshots and logos as JPEG', async () => {
   const rels = await zip.file('word/_rels/document.xml.rels').async('string');
   for (const [, target] of rels.matchAll(/Target="(media\/[^"]+)"/g)) assert.ok(zip.file(`word/${target}`), target);
 });
+
+test('the recovery-draft check skips decoding only screenshots this session decoded, by verified content', async () => {
+  const a = png(4, 3), b = png(5, 3);
+  const p = project([image(1, a, 4, 3), image(2, b, 5, 3)]);
+  const seen = [];
+  // Reads the size from the PNG header, like a real decode would report it.
+  const decodeImage = async (bytes) => { seen.push(bytes.length); const v = new DataView(bytes.buffer, bytes.byteOffset); return { width: v.getUint32(16), height: v.getUint32(20) }; };
+  const decodedImages = new Map();
+  assert.ok((await open(p, { decodeImage, decodedImages })).ok);
+  assert.equal(seen.length, 2, 'first check decodes both');
+  assert.equal(decodedImages.size, 2);
+  seen.length = 0;
+  assert.ok((await open(p, { decodeImage, decodedImages })).ok);
+  assert.equal(seen.length, 0, 'unchanged screenshots are not decoded again');
+  // A replaced screenshot (other bytes) is decoded.
+  const c = png(6, 3);
+  p.images[1] = image(2, c, 6, 3);
+  assert.ok((await open(p, { decodeImage, decodedImages })).ok);
+  assert.deepEqual(seen, [c.length]);
+  // A file claiming a remembered hash for other bytes fails the hash check before any decode.
+  const forged = project([image(1, a, 4, 3)]);
+  forged.images[0] = { ...image(1, png(4, 3).subarray(0), 4, 3), sha256: createHash('sha256').update(b).digest('hex') };
+  seen.length = 0;
+  assert.equal((await open(forged, { decodeImage, decodedImages })).ok, false);
+  assert.equal(seen.length, 0);
+  // Without the map (opening a file or a draft), every screenshot is decoded.
+  seen.length = 0;
+  assert.ok((await open(project([image(1, a, 4, 3)]), { decodeImage })).ok);
+  assert.equal(seen.length, 1);
+});

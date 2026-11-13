@@ -757,10 +757,17 @@ async function cleanProjectImages(project) {
   return { cleaned };
 }
 
-export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, onProgress } = {}) {
+/**
+ * `decodedImages` (optional, the app's own Map; never read from a file): screenshots this
+ * session has already decoded successfully, keyed by type, size and the SHA-256 the
+ * validator has just verified against the bytes. A screenshot found there is not decoded
+ * again; every other check still runs. Only the recovery-draft writer passes it: opening a
+ * file or a draft always decodes every screenshot.
+ */
+export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, onProgress, decodedImages = null } = {}) {
   const parsed = parseProjectFile(raw, rawBytes);
   if (!parsed.ok) return parsed;
-  const checked = await validateProjectData(parsed.data, { decodeImage, onProgress });
+  const checked = await validateProjectData(parsed.data, { decodeImage, onProgress, decodedImages });
   if (!checked.ok) return checked;
   const from = checked.project.schemaVersion;
   const images = await cleanProjectImages(checked.project);
@@ -808,7 +815,7 @@ function parseProjectFile(raw, rawBytes) {
   return { ok: true, data };
 }
 
-async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress } = {}) {
+async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress, decodedImages = null } = {}) {
   const errors = [];
   const v = data.schemaVersion;
   const L = limitsForVersion(v);
@@ -949,10 +956,11 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
   // Screenshots are decoded a few at a time (the browser decodes off the main thread); at most
   // four are in flight, so only their bytes are held.
   const decoding = new Set();
-  const decodeOne = async (path, bytes, mime, sniff) => {
+  const decodeOne = async (path, bytes, mime, sniff, key) => {
     try {
       const d = await decodeImage(bytes, mime);
       if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
+      else decodedImages?.set(key, true);
     } catch {
       err(path, 'image data cannot be decoded');
     }
@@ -993,8 +1001,10 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
     else if (await sha256Hex(bytes) !== im.sha256) err(`${path}.sha256`, 'does not match the image data');
     // Decode only an image that passed every cheaper check, so a hostile header
     // cannot make the browser allocate a raster we already know is oversized.
-    if (decodeImage && failures === failuresBefore) {
-      const job = decodeOne(path, bytes, im.mime, sniff).finally(() => decoding.delete(job));
+    // im.sha256 has just been checked against the bytes, so the key names this exact content.
+    const decodedKey = `${im.mime}|${sniff.width}x${sniff.height}|${im.sha256}`;
+    if (decodeImage && failures === failuresBefore && !decodedImages?.has(decodedKey)) {
+      const job = decodeOne(path, bytes, im.mime, sniff, decodedKey).finally(() => decoding.delete(job));
       decoding.add(job);
       if (decoding.size >= 4) await Promise.race(decoding);
     }

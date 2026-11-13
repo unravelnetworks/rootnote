@@ -3040,6 +3040,14 @@ Third-party software notices
   // profile a few seconds after each change. A draft found at start is offered, never
   // loaded silently, and nothing overwrites it until the user restores or discards it.
   const DRAFT_DELAY = 4000;
+  // Screenshots the draft check has decoded successfully in this session, for this project only:
+  // a new or opened project starts empty. Content-keyed (see openProjectFile); at most one
+  // entry per image the project can hold, then it starts over.
+  let draftDecoded = { gen: -1, map: new Map() };
+  const decodedForDrafts = () => {
+    if (draftDecoded.gen !== generation || draftDecoded.map.size > 2 * LIMITS.images) draftDecoded = { gen: generation, map: new Map() };
+    return draftDecoded.map;
+  };
   // Independent review F3: on a file:// page every local HTML file shares this storage.
   const DRAFT_DISCLOSURE = 'Keep an unencrypted recovery draft in this browser profile. It includes screenshots. Because the app runs from a file on your disk, any other web page or HTML file you open from this computer\'s disk in this browser can read or replace the draft, and anyone with access to this profile may be able to read it. Leave it off if you open HTML files from targets or tools in this browser. Save a project file for your own backup. Turning this off deletes the draft and reports whether that worked.';
   const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false };
@@ -3079,7 +3087,8 @@ Third-party software notices
     draftState.busy = true;
     try {
       // A draft is stored only if it would open in this app as it is.
-      const check = await openProjectFile(json, bytes, { appVersion, decodeImage: decodeImageInBrowser });
+      // Screenshots this session already decoded are not decoded again (decodedForDrafts).
+      const check = await openProjectFile(json, bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts() });
       if (!check.ok || check.overBudgetBytes > 0 || check.migratedFrom !== null) return;
       if (gen !== generation || rev !== revision || epoch !== draftState.epoch || !draftWanted()) return; // newer state follows
       const result = await writeDraft(epoch, { savedAt: new Date().toISOString(), appVersion, bytes, json });
