@@ -497,7 +497,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     main.querySelector('.live-show')?.toggleAttribute('hidden', !!f || view === 'start' || !findingById(view));
     fitAll(); // the editor column changed width
     if (!f) { clearTimeout(liveTimer); live.replaceChildren(); liveKey = ''; return; }
-    drawLive();
+    // Drawn right after the editor is shown, so moving to a finding is not held up by it.
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(drawLive, 0);
   }
   function scheduleLive() {
     if (!liveFinding()) return;
@@ -521,7 +523,11 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const head = liveHead;
     const host = h('div', { class: 'pv live-pv live-body' });
     live.append(host);
-    renderPreview(host, plan, { images: new Map(doc.images.map((im) => [im.id, im])), onTallMode: () => {} });
+    // Only this finding's screenshots are drawn: the other pages are hidden, and drawing every
+    // screenshot of a large report made each redraw take seconds.
+    const shown = new Set();
+    JSON.stringify(plan.findings.find((x) => x.id === f.id) ?? {}, (k, v) => { if (k === 'imageId' && typeof v === 'string') shown.add(v); return v; });
+    renderPreview(host, plan, { images: new Map(doc.images.map((im) => [im.id, im])), onTallMode: () => {}, imagesFor: shown });
     // Read-only: no screenshot layout controls and no approximation banner here (the header says where it is).
     host.querySelectorAll('.pv-control, .pv-note').forEach((e) => e.remove());
     const pages = [...host.querySelectorAll('.pv-page')];

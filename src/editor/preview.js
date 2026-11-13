@@ -10,9 +10,10 @@ const TALL_MODES = [['auto', 'Automatic'], ['split', 'Split into parts'], ['fit'
 /**
  * Renders `plan` into `host` (which must be in the document, so blocks can be measured).
  * `onTallMode(imageId, mode)` is called when a screenshot's fit/split choice changes;
- * `images` maps image id to the project's image record.
+ * `images` maps image id to the project's image record. `imagesFor`, a Set of image ids,
+ * draws only those screenshots (the live page); null draws all.
  */
-export function renderPreview(host, plan, { images, onTallMode }) {
+export function renderPreview(host, plan, { images, onTallMode, imagesFor = null }) {
   const g = plan.geometry;
   const px = (n) => `${Math.round(n * 100) / 100}px`;
   const assets = new Map(plan.imageAssets.map((im) => [im.id, im]));
@@ -196,8 +197,11 @@ export function renderPreview(host, plan, { images, onTallMode }) {
     const im = assets.get(ev.imageId);
     ev.parts.forEach((part) => {
       const scale = part.width / part.sourceWidth;
+      // `imagesFor` (the live page): only the shown finding's screenshots are drawn; the
+      // others keep their exact box, so pagination and page numbers do not change.
+      const drawn = !imagesFor || imagesFor.has(ev.imageId);
       const crop = h('div', { class: 'pv-crop', style: `width: ${px(part.width)}; height: ${px(part.height)}` },
-        h('img', { src: im.dataUrl, alt: `${plan.labels.figure} ${ev.figure}${part.captionSuffix}`, style: `width: ${px(im.width * scale)}; height: ${px(im.height * (part.height / part.sourceHeight))}; top: ${px(-part.y * (part.height / part.sourceHeight))}` }));
+        drawn && h('img', { src: im.dataUrl, alt: `${plan.labels.figure} ${ev.figure}${part.captionSuffix}`, style: `width: ${px(im.width * scale)}; height: ${px(im.height * (part.height / part.sourceHeight))}; top: ${px(-part.y * (part.height / part.sourceHeight))}` }));
       const caption = h('p', { class: 'pv-caption' }, `${plan.labels.figure} ${ev.figure}: ${ev.caption}${part.captionSuffix}`);
       const control = part.index === 1 ? tallControl(ev, part.count) : null;
       place(h('figure', { class: 'pv-figure', dataset: { image: ev.imageId, part: String(part.index) } }, control, crop, caption));
