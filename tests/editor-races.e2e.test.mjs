@@ -218,7 +218,8 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
       await b.evaluate("document.querySelector('[data-testid=start-new]')?.click()"); // past the start screen
       await b.evaluate(GATE);
       await b.setFile('[data-testid=open-input]', fixture);
-      assert.ok(await b.waitFor('window.pendingDecodes.length === 1'));
+      // Opening decodes up to four screenshots at a time: at least one is held here.
+      assert.ok(await b.waitFor('window.pendingDecodes.length >= 1'));
       await b.evaluate(`(() => { const el = document.querySelector('[data-testid=title]'); el.value = 'EDIT DURING OPEN'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await b.evaluate(`window.releaseTimer = setInterval(() => ${RELEASE}, 10)`);
       assert.ok(await b.waitFor('!!document.querySelector("dialog.confirm")'), 'no reconfirmation dialog');
@@ -236,7 +237,8 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
       await fresh(b);
       await b.evaluate(GATE);
       await b.setFile('[data-testid=open-input]', fixture);
-      assert.ok(await b.waitFor('window.pendingDecodes.length === 1'));
+      // Opening decodes up to four screenshots at a time: at least one is held here.
+      assert.ok(await b.waitFor('window.pendingDecodes.length >= 1'));
       await b.evaluate("document.querySelector('[data-testid=new-project]').click()");
       assert.ok(await b.waitFor("!!document.querySelector('dialog [data-choice=blank]')"));
       await b.evaluate("document.querySelector('dialog [data-choice=blank]').click()");

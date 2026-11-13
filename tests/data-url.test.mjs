@@ -40,3 +40,24 @@ test('the decoder gives the same bytes as atob, and fails where atob fails', () 
   }
   for (const bad of ['Q', 'QUJDQ', 'QU=JD', 'Q===']) assert.throws(() => base64ToBytes(bad), undefined, bad);
 });
+
+test('without the built-in decoder: the same checks and bytes through the fallback', () => {
+  const desc = Object.getOwnPropertyDescriptor(Uint8Array, 'fromBase64');
+  try {
+    if (desc) delete Uint8Array.fromBase64;
+    assert.equal(typeof Uint8Array.fromBase64, 'undefined');
+    for (const c of ['data:image/png;base64,QUJD', 'data:image/png;base64,QQ', 'data:image/png;base64,ABCDQU_D', 'data:image/png;base64,AB=DQQ==', 'data:image/png;base64,ABCD QUJ', 'data:image/png;base64,ABCDQQ====']) {
+      const o = OLD.exec(c);
+      assert.deepEqual(parseImageDataUrl(c), o ? { type: o[1], base64: o[2] } : null, JSON.stringify(c));
+    }
+    assert.deepEqual(parseImageDataUrl('data:image/png;base64,QUJDQUJD', 4), { tooLarge: true });
+    for (const len of [1, 2, 3, 1000]) {
+      const b64 = Buffer.from(Uint8Array.from({ length: len }, (_, i) => i & 255)).toString('base64');
+      assert.deepEqual(base64ToBytes(b64), atobBytes(b64));
+    }
+    assert.throws(() => base64ToBytes('Q'));
+  } finally {
+    if (desc) Object.defineProperty(Uint8Array, 'fromBase64', desc);
+  }
+  assert.equal(typeof Uint8Array.fromBase64, desc ? 'function' : 'undefined', 'restored');
+});
