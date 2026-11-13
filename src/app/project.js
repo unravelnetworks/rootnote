@@ -68,17 +68,29 @@ const IMAGE_ID = /^IMG-(?!0000)[0-9]{4}$/;
 const DATE = /^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 // A screenshot's data URL: data:image/png|jpeg;base64, then base64 characters and at most two
-// '=' at the end. Checked with a prefix match and one character scan: a single pattern over the
-// whole string was slow on large projects (hundreds of MB of base64 when opening).
+// '=' at the end. A single pattern over the whole string was slow on large projects (hundreds
+// of MB of base64 when opening), so the parts are checked separately below.
 const DATA_URL_PREFIX = /^data:image\/(png|jpeg);base64,/;
 const NOT_BASE64 = /[^A-Za-z0-9+/]/;
+const BASE64_WHITESPACE = /[\t\n\f\r ]/;
+// True when every character is in the base64 alphabet. The built-in decoder rejects any other
+// character except ASCII whitespace and '=', which the caller has already ruled out; it is much
+// faster than a character-class scan over hundreds of MB.
+const allBase64 = (s) => {
+  if (typeof Uint8Array.fromBase64 !== 'function') return !NOT_BASE64.test(s);
+  try { Uint8Array.fromBase64(s); return true; } catch { return false; }
+};
 /** Returns [type, base64] for a valid screenshot data URL, else null. */
 export function parseImageDataUrl(s) {
   const m = DATA_URL_PREFIX.exec(s);
   if (!m) return null;
   let end = s.length;
   for (let pad = 0; pad < 2 && end > m[0].length && s.charCodeAt(end - 1) === 61; pad++) end--;
-  if (end === m[0].length || NOT_BASE64.test(s.slice(m[0].length, end))) return null;
+  const core = s.slice(m[0].length, end);
+  if (!core.length || core.indexOf('=') !== -1 || BASE64_WHITESPACE.test(core)) return null;
+  // Whole groups of four through the decoder; the last 0-3 characters checked directly.
+  const whole = core.length - (core.length % 4);
+  if (NOT_BASE64.test(core.slice(whole)) || (whole && !allBase64(core.slice(0, whole)))) return null;
   return [m[1], s.slice(m[0].length)];
 }
 const SHA256 = /^[0-9a-f]{64}$/;

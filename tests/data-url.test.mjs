@@ -16,6 +16,9 @@ test('accepts and rejects exactly what the old pattern did', () => {
     'data:image/jpeg;base64,QU=JD', 'data:image/gif;base64,QUJD', 'data:image/png;base64,QUJD-', 'data:image/png;base64,QUJD_',
     'data:image/png;base64,QUJDé', 'DATA:image/png;base64,QUJD', 'data:image/png;charset=utf-8;base64,QUJD',
     ' data:image/png;base64,QUJD', 'data:image/svg+xml;base64,QUJD', 'data:image/png;base64,Q=Q=', 'data:image/png;base64,QUJD==\n',
+    'data:image/png;base64,Q', 'data:image/png;base64,QUJDQ', 'data:image/png;base64,ABCDQQ====', 'data:image/png;base64,ABCDQQ===',
+    'data:image/png;base64,AB=DQQ==', 'data:image/png;base64,ABCDéQQ=', 'data:image/png;base64,AB-DQUJD', 'data:image/png;base64,ABCDQU_D',
+    'data:image/png;base64,ABCDQUJ\u000b', 'data:image/png;base64,ABCDQUJ\f', 'data:image/png;base64,AB\rDQUJD', 'data:image/png;base64,ABCD QUJ',
   ];
   for (const c of cases) {
     const o = OLD.exec(c), n = parseImageDataUrl(c);
