@@ -603,6 +603,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     // it and the remembered counts of everything else.
     let own = getCount(plan, k);
     if (own === undefined) { own = live.offsetParent ? bodyPages : countPages(plan, { only: { findingId: f.id, bodyOffset: null } }); setCount(plan, k, own); }
+    // Forget findings that are no longer in the report (deleted ones would otherwise stay until a background pass).
+    if (counts().findings.size > plan.findings.length) { const ids = new Set(plan.findings.map((x) => x.id)); for (const id of [...counts().findings.keys()]) if (!ids.has(id)) counts().findings.delete(id); }
     const numbers = pageNumbers(plan, k, own);
     if (numbers) host.querySelectorAll('.pv-running-footer > span:last-child').forEach((sp, i) => { sp.textContent = `${plan.labels.page} ${numbers.before + i + 1} ${plan.labels.pageOf} ${numbers.total}`; });
     // Read-only: no screenshot layout controls and no approximation banner here (the header says where it is).
