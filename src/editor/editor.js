@@ -512,7 +512,18 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   // counts are filled in small slices after the live page is shown; until then it shows the
   // finding without page numbers. Laying out the whole report on every keystroke pause and
   // every finding change took seconds in large reports.
-  const pageCounts = new Map(); // content key -> body pages
+  // One remembered count per finding (and one for the front matter), each with the content key
+  // it was counted for, so edits replace a finding's entry instead of adding to it. Cleared when
+  // another project is opened.
+  let pageCounts = { gen: -1, front: null, findings: new Map() }; // findings: id -> { key, n }
+  const counts = () => {
+    if (pageCounts.gen !== generation) { clearTimeout(countJob); pageCounts = { gen: generation, front: null, findings: new Map() }; }
+    return pageCounts;
+  };
+  const getFront = (plan) => { const c = counts().front; return c && c.key === frontCountKey(plan) ? c.n : undefined; };
+  const setFront = (plan, n) => { counts().front = { key: frontCountKey(plan), n }; };
+  const getCount = (plan, j) => { const c = counts().findings.get(plan.findings[j].id); return c && c.key === findingCountKey(plan, j) ? c.n : undefined; };
+  const setCount = (plan, j, n) => { counts().findings.set(plan.findings[j].id, { key: findingCountKey(plan, j), n }); };
   let countJob = null;
   const findingCountKey = (plan, k) => JSON.stringify([plan.findings[k], k === 0, plan.geometry, plan.design, plan.labels, plan.running, plan.findingsAnchor]);
   const frontCountKey = (plan) => JSON.stringify({ ...plan, findings: plan.findings.length, imageAssets: plan.imageAssets.map((a) => [a.id, a.width, a.height]) });
@@ -525,12 +536,12 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   /** Body pages before finding k and in the whole report, given finding k's own count, or
    * null while another count is missing. */
   function pageNumbers(plan, k, own) {
-    const front = pageCounts.get(frontCountKey(plan));
+    const front = getFront(plan);
     if (front === undefined) return null;
     let before = front, total = front + own;
     for (let j = 0; j < plan.findings.length; j++) {
       if (j === k) continue;
-      const n = pageCounts.get(findingCountKey(plan, j));
+      const n = getCount(plan, j);
       if (n === undefined) return null;
       if (j < k) before += n;
       total += n;
@@ -540,8 +551,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   // The counts a plan is missing (except finding `skip`, which the live page lays out itself).
   function missingCounts(plan, skip = -1) {
     const jobs = [];
-    if (!pageCounts.has(frontCountKey(plan))) jobs.push(() => pageCounts.set(frontCountKey(plan), countPages(plan, { frontOnly: true })));
-    plan.findings.forEach((x, j) => { if (j !== skip && !pageCounts.has(findingCountKey(plan, j))) jobs.push(() => pageCounts.set(findingCountKey(plan, j), countPages(plan, { only: { findingId: x.id, bodyOffset: null } }))); });
+    if (getFront(plan) === undefined) jobs.push(() => setFront(plan, countPages(plan, { frontOnly: true })));
+    plan.findings.forEach((x, j) => { if (j !== skip && getCount(plan, j) === undefined) jobs.push(() => setCount(plan, j, countPages(plan, { only: { findingId: x.id, bodyOffset: null } }))); });
     return jobs;
   }
   // Counts what is missing, one finding per task, then redraws once with page numbers.
@@ -554,9 +565,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       jobs.shift()();
       if (jobs.length) countJob = setTimeout(next, 0);
       else {
-        // Keep only the counts the current report uses.
-        const keep = new Set([frontCountKey(plan), ...plan.findings.map((_, j) => findingCountKey(plan, j))]);
-        for (const key of [...pageCounts.keys()]) if (!keep.has(key)) pageCounts.delete(key);
+        // Forget findings that are no longer in the report.
+        const ids = new Set(plan.findings.map((x) => x.id));
+        for (const id of [...counts().findings.keys()]) if (!ids.has(id)) counts().findings.delete(id);
         drawLive();
       }
     };
@@ -590,9 +601,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     // The page count comes from a layout off screen at the page's real size (the pane may be
     // hidden on a narrow window, where nothing can be measured); the footers are numbered from
     // it and the remembered counts of everything else.
-    const ownKey = findingCountKey(plan, k);
-    let own = pageCounts.get(ownKey);
-    if (own === undefined) { own = live.offsetParent ? bodyPages : countPages(plan, { only: { findingId: f.id, bodyOffset: null } }); pageCounts.set(ownKey, own); }
+    let own = getCount(plan, k);
+    if (own === undefined) { own = live.offsetParent ? bodyPages : countPages(plan, { only: { findingId: f.id, bodyOffset: null } }); setCount(plan, k, own); }
     const numbers = pageNumbers(plan, k, own);
     if (numbers) host.querySelectorAll('.pv-running-footer > span:last-child').forEach((sp, i) => { sp.textContent = `${plan.labels.page} ${numbers.before + i + 1} ${plan.labels.pageOf} ${numbers.total}`; });
     // Read-only: no screenshot layout controls and no approximation banner here (the header says where it is).
