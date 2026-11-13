@@ -224,6 +224,6 @@ export async function exportDocxV2(project, options = {}) {
   }
   // Screenshots are PNG or JPEG, already compressed: they are stored as they are, and only the
   // XML parts are deflated (deflating every screenshot again made large exports take minutes).
-  for (const name of Object.keys(zip.files).filter(n=>/^word\/media\//.test(n))) zip.file(name,await zip.file(name).async('uint8array'),{compression:'STORE'});
+  for (const name of Object.keys(zip.files).filter(n=>/^word\/media\/./.test(n)&&!zip.files[n].dir)) zip.file(name,await zip.file(name).async('uint8array'),{compression:'STORE'});
   return zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
 }
