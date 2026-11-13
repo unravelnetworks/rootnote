@@ -4,7 +4,7 @@ A finding is one issue in the report: how serious it is, where it is, and the te
 
 ## Add a finding
 
-Choose **+ New finding** in the list on the left. A report can hold up to 20 findings. They appear in the report in the same order as in the list; drag them to reorder.
+Choose **+ New finding** in the list on the left. A report can hold up to 150 findings. They appear in the report in the same order as in the list; drag them to reorder.
 
 ## Set the key facts
 

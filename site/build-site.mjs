@@ -168,7 +168,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <p><strong>Offline</strong>, unzip the download, check its SHA-256 against this page, and open <code>rootnote.html</code>. It works with the network unplugged.</p>
     <p>Check it yourself: open your browser's developer tools, Network tab, and use the app.</p></div>
   <div><h2>Limits, honestly</h2><ul>
-    <li>Per project: 20 findings, 30 screenshots (2 MiB each), 25 MiB file. These are the sizes we have tested, not a paid restriction; tell us if they get in your way.</li>
+    <li>Per project: up to 150 findings, 400 screenshots (2 MB each) and a 256 MB file, tested on Windows with 64 GB of RAM. Large reports need a lot of memory. These are sizes we have tested, not a paid tier. Everything in Rootnote is free.</li>
     <li>One built-in report design; your own Word template is not supported.</li>
     <li>No scanner imports, collaboration or AI. CVSS 4.0 is Base metrics only.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
