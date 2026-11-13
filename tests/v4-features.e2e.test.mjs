@@ -145,7 +145,7 @@ for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`schema
       assert.equal(d.schemaVersion, 8); // converted to the current schema
       assert.equal(d.project.engagementStatus, null);
       assert.ok(d.findings.every((f) => f.status === null));
-      assert.match(await b.evaluate("document.querySelector('.status').textContent"), /converted this project from an older version. It now uses this version.s limits: up to 150 findings and 400 screenshots. When you save, it is written as project format 8. Rootnote 0.2.x and earlier cannot open that./);
+      assert.match(await b.evaluate("document.querySelector('.status').textContent"), /Converted from an older version, so it now allows up to 150 findings and 400 screenshots. Saving writes project format 8, which Rootnote 0.2.x and earlier cannot open. Keep your original file if you still need it./);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=engagement-status]').selectedOptions[0].textContent"), 'Not set');
       await b.evaluate(nav('Preview'));
       assert.ok(await b.waitFor("!!document.querySelector('.pv-summary')"));

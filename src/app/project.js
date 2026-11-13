@@ -730,8 +730,9 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 }
 
 /**
- * Opens a project file for editing: validates it in its own version, converts v1 to v6
- * on to v7, and reports whether the converted project is over the 25 MB budget.
+ * Opens a project file for editing: validates it in its own version (with that version's
+ * bounds), converts v1 to v7 on to v8, and reports whether the converted project is over
+ * the project size budget.
  * Returns { ok: false, errors, newer? } or
  * { ok: true, project, migratedFrom: 1 | 2 | 3 | 4 | 5 | 6 | null, overBudgetBytes }.
  * overBudgetBytes > 0 happens only for a converted v1-v6 file that was within the

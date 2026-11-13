@@ -1,8 +1,9 @@
 // The released build at its real 256 MiB limit (the budget rules in detail run on the test-only
 // 25 MiB build, tests/harness/test-budget.mjs). A v8 project 16 KiB under the limit opens;
 // a screenshot that does not fit is refused, and so is a text edit that does not fit, with
-// nothing changed; a small edit still works; the project saves and reopens with the same content.
-// Chrome only: one large project is enough to show the real limit; other engines run the same code.
+// nothing changed (same content digest, next ids and unsaved-changes flag); a small edit still
+// works; the project saves and reopens with the same content digest.
+// Chrome only. Edge and Firefox at the real limit are checked separately (pending), not implied here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -20,6 +21,14 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dist = here('../dist/rootnote.html');
 const out = here('./out/real-cap');
 const snap = 'window.__fieldnote.snapshot()';
+// SHA-256 of the whole project as Save writes it, except savedAt and appVersion, computed in
+// the page (outside any timing); with the next ids and the unsaved-changes flag.
+const STATE = `(async () => {
+  const s = window.__fieldnote.snapshot();
+  const text = JSON.stringify({ ...s, savedAt: '', appVersion: '' });
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+  return { digest: [...d].map((x) => x.toString(16).padStart(2, '0')).join(''), nextFinding: s.project.nextFindingNumber, nextImage: s.project.nextImageNumber, dirty: window.__fieldnote.isDirty() };
+})()`;
 
 function crc32(buf) {
   let c, crc = 0xffffffff;
@@ -89,19 +98,20 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
     await t.test('a screenshot that does not fit is refused and nothing changes', async () => {
       const big = join(out, 'big.png');
       writeFileSync(big, png(980, 700, 250));
-      const images = await b.evaluate(`${snap}.images.length`);
+      const state = await b.evaluate(STATE);
       await b.setFile('[data-testid=image-input]', big);
       assert.ok(await b.waitFor("/would take the project over 256 MB/.test(document.querySelector('.status').textContent)", 60000), await b.evaluate("document.querySelector('.status').textContent"));
-      assert.equal(await b.evaluate(`${snap}.images.length`), images);
+      assert.deepEqual(await b.evaluate(STATE), state, 'nothing changed');
       assert.equal(await b.evaluate('window.__fieldnote.savedBytes()'), before);
     });
 
     await t.test('a text edit that does not fit is refused, the field shows the stored text; a small one works', async () => {
       const area = "document.querySelector('[data-testid=description]')";
       const stored = await b.evaluate(`${snap}.findings[0].description`);
+      const state = await b.evaluate(STATE);
       await b.evaluate(`(() => { const a = ${area}; a.value = a.value.slice(0, 10) + 'é'.repeat(19990); a.dispatchEvent(new Event('input', { bubbles: true })); a.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       assert.ok(await b.waitFor("/would take the project over 256 MB/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
-      assert.equal(await b.evaluate(`${snap}.findings[0].description`), stored, 'model unchanged');
+      assert.deepEqual(await b.evaluate(STATE), state, 'nothing changed');
       assert.equal(await b.evaluate(`${area}.value`), stored, 'the field shows what Save writes');
       assert.equal(await b.evaluate('window.__fieldnote.savedBytes()'), before);
       await b.evaluate("(() => { const t = document.querySelector('[data-testid=finding-title]'); t.value = 'Finding 1 at the limit'; t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); })()");
@@ -112,7 +122,7 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       const dl = join(out, 'saved');
       mkdirSync(dl, { recursive: true });
       await b.allowDownloads(dl);
-      const expected = await b.evaluate(`(() => { const s = ${snap}; return JSON.stringify({ ...s, savedAt: '' }).length; })()`);
+      const expected = (await b.evaluate(STATE)).digest;
       await b.evaluate("document.querySelector('[data-testid=save]').click()");
       const saved = await waitForFile(dl, /\.rootnote\.json$/, 300000);
       assert.ok(statSync(saved).size <= LIMITS.fileBytes, `saved file ${statSync(saved).size} bytes`);
@@ -121,8 +131,9 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
       await b.setFile('[data-testid=open-input]', saved);
       assert.ok(await b.waitFor(`window.__fieldnote.snapshot().findings.length === 150 && /^Opened /.test(document.querySelector('.status').textContent)`, 300000), 'saved project did not reopen');
-      const again = await b.evaluate(`(() => { const s = ${snap}; return { title: s.findings[0].title, images: s.images.length, len: JSON.stringify({ ...s, savedAt: '' }).length }; })()`);
-      assert.deepEqual(again, { title: 'Finding 1 at the limit', images: d.images.length, len: expected });
+      const again = await b.evaluate(STATE);
+      assert.equal(again.digest, expected, 'the reopened project is the saved one');
+      assert.equal(await b.evaluate(`${snap}.findings[0].title`), 'Finding 1 at the limit');
     });
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {

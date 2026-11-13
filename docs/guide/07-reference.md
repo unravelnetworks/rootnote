@@ -7,13 +7,13 @@ The rules worth knowing, in one place.
 | Item | Limit |
 |---|---|
 | Findings per report | 150 |
-| Screenshots per report | 400, PNG or JPEG, each up to 2 MB |
+| Screenshots per report | 400, PNG or JPEG, each up to 2 MB (2 MiB, 2,097,152 bytes) |
 | Project file | 256 MB in total (256 MiB, 268,435,456 bytes) |
 | References per finding | 20 |
 | Your own report sections | 10 |
 | Finding library | 500 entries, text only |
 
-These are sizes we have tested, not a paid tier. Everything in Rootnote is free. If you reach one, Rootnote says so and keeps your work as it was. Rootnote refuses the change that would take a project over the limit, rather than letting you save a file it cannot open again. A project that saves will reopen.
+These are sizes we have tested, not a paid tier. Everything in Rootnote is free. If you reach one, Rootnote says so and keeps your work as it was. Rootnote checks the project size before saving and refuses changes that would exceed this version's limits. Keep a backup of the saved file.
 
 Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows in Chrome, Edge and Firefox, on a machine with 64 GB of RAM. Reports that large need a lot of memory, and Firefox needs the most. On a machine with less RAM, work in Chrome or Edge and keep large reports smaller. The largest reports also take longer to open, preview and export in Firefox.
 

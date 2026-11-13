@@ -1601,7 +1601,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   // Restores must fit every limit as a whole, or change nothing.
   const imageRoom = (image) => (doc.images.some((x) => x.id === image.id) ? 'the screenshot is already in the project.'
     : evidenceCount() + 1 > LIMITS.evidence ? `the report already uses ${LIMITS.evidence} screenshots, the most Rootnote is tested to handle.`
-      : doc.images.length + 1 > LIMITS.images ? `the report already holds ${LIMITS.images} images, the most a project can.` : null);
+      : doc.images.length + 1 > LIMITS.images ? `the report already holds ${LIMITS.images} images, the most a project can hold.` : null);
   const BUDGET_REASON = `the project would go over ${CAP}, the most Rootnote is tested to save and reopen. Nothing else has changed.`;
   /** Puts a removed Additional details block (and its image) back at its old place. */
   function restoreBlock(fid, at, block, image = null, imageAt = 0) {
@@ -3028,8 +3028,8 @@ Third-party software notices
     // Screenshots that still carried hidden data were cleaned on open; saving keeps the clean copy.
     const cleaned = cleanedNote(result.cleanedImages);
     if (cleaned) markDirty();
-    if (result.overBudgetBytes > 0) say(`Opened "${file.name}" (${counts}) and converted it from an older version. It is now over the ${CAP} limit; see the notice above.${cleaned}`, 'error');
-    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}). Rootnote converted this project from an older version. It now uses this version's limits: up to ${LIMITS.findings} findings and ${LIMITS.evidence} screenshots. When you save, it is written as project format 8. Rootnote 0.2.x and earlier cannot open that. If you still need the older version, keep your original file or use Save as.${cleaned}`);
+    if (result.overBudgetBytes > 0) say(`Opened "${file.name}" (${counts}) and converted it from an older version. It is over the ${CAP} limit, so it cannot be saved as it is. Remove a screenshot you no longer need, or split the engagement into two reports. When it does save, it is written as project format 8, which Rootnote 0.2.x and earlier cannot open.${cleaned}`, 'error');
+    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}). Converted from an older version, so it now allows up to ${LIMITS.findings} findings and ${LIMITS.evidence} screenshots. Saving writes project format 8, which Rootnote 0.2.x and earlier cannot open. Keep your original file if you still need it.${cleaned}`);
     else say(`Opened "${file.name}" (${counts}).${cleaned}`, 'info', { fade: !cleaned });
     render();
     return true;

@@ -26,7 +26,10 @@ if (git('status', '--porcelain', '--untracked-files=no')) {
 const commit = git('rev-parse', 'HEAD');
 const commitDate = new Date(Number(git('log', '-1', '--format=%ct')) * 1000);
 
-execFileSync(process.execPath, [at('scripts/build.mjs')], { cwd: root, stdio: 'inherit' });
+// The test-only budget setting builds into dist-test/ and would leave an old dist/ in place.
+if (process.env.TEST_BUDGET_BYTES) throw new Error('TEST_BUDGET_BYTES is set: unset it to build a release.');
+const { TEST_BUDGET_BYTES: _unset, ...buildEnv } = process.env;
+execFileSync(process.execPath, [at('scripts/build.mjs')], { cwd: root, stdio: 'inherit', env: buildEnv });
 
 // The showcase sample (fictional client, real-looking logos and synthetic screenshots),
 // never a test fixture. Its Word files are

@@ -31,7 +31,7 @@ const budgetPlugin = {
     b.onLoad({ filter: /[\\/]src[\\/]app[\\/]project\.js$/ }, async (args) => {
       const src = await readFile(args.path, 'utf8');
       const from = 'fileBytes: 268435456, findings: 150';
-      if (!src.includes(from)) throw new Error('test budget: the v8 limit line was not found in project.js');
+      if (src.split(from).length !== 2) throw new Error('test budget: the v8 limit line must appear exactly once in project.js');
       return { contents: src.replace(from, `fileBytes: ${testBudget}, findings: 150`), loader: 'js' };
     });
   },
@@ -89,7 +89,9 @@ for (const file of [testBudget ? 'rootnote-test-budget.html' : 'rootnote.html'])
     .replace('__SCRIPT__', () => script);
 
   if (!testBudget) await writeFile(new URL('dist/bundled-packages.json', root), JSON.stringify(packages, null, 2) + '\n');
-  const out = testBudget ? html.replace('<head>', `<head>\n<!-- TEST BUDGET BUILD: project limit ${testBudget} bytes. Not for use. -->`) : html;
+  const out = testBudget
+    ? html.replace('<head>', `<head>\n<!-- TEST BUDGET BUILD: project limit ${testBudget} bytes. Not for use. -->`).replace('<title>', '<title>[TEST BUILD, not for use] ')
+    : html;
   await writeFile(new URL(`${outDir}${file}`, root), out);
   console.log(`${outDir}${file} ${out.length} bytes, sha256 ${createHash('sha256').update(out).digest('hex')}`);
 }
