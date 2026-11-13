@@ -537,12 +537,17 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     }
     return { before, total };
   }
+  // The counts a plan is missing (except finding `skip`, which the live page lays out itself).
+  function missingCounts(plan, skip = -1) {
+    const jobs = [];
+    if (!pageCounts.has(frontCountKey(plan))) jobs.push(() => pageCounts.set(frontCountKey(plan), countPages(plan, { frontOnly: true })));
+    plan.findings.forEach((x, j) => { if (j !== skip && !pageCounts.has(findingCountKey(plan, j))) jobs.push(() => pageCounts.set(findingCountKey(plan, j), countPages(plan, { only: { findingId: x.id, bodyOffset: null } }))); });
+    return jobs;
+  }
   // Counts what is missing, one finding per task, then redraws once with page numbers.
   function scheduleCounts(plan, gen, rev) {
     clearTimeout(countJob);
-    const jobs = [];
-    if (!pageCounts.has(frontCountKey(plan))) jobs.push(() => pageCounts.set(frontCountKey(plan), countPages(plan, { frontOnly: true })));
-    plan.findings.forEach((x, j) => { if (!pageCounts.has(findingCountKey(plan, j))) jobs.push(() => pageCounts.set(findingCountKey(plan, j), countPages(plan, { only: { findingId: x.id, bodyOffset: null } }))); });
+    const jobs = missingCounts(plan);
     if (!jobs.length) return;
     const next = () => {
       if (gen !== generation || rev !== revision) return; // a newer draw schedules its own counts
@@ -573,6 +578,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const where = liveHead.querySelector('[data-testid=live-where]');
     if (!plan) { where.textContent = ''; live.append(h('p', { class: 'hint live-body' }, reason)); return; }
     const k = plan.findings.findIndex((x) => x.id === f.id);
+    // A report of ordinary size is counted at once (it takes a moment); a large one in the background.
+    if (plan.findings.length <= 30) for (const job of missingCounts(plan, k)) job();
     if (k < 0) { where.textContent = '· This finding is not in the report'; live.append(h('p', { class: 'hint live-body' }, 'This finding is not in the report.')); return; }
     const host = h('div', { class: 'pv live-pv live-body' });
     live.append(host);
