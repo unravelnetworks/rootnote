@@ -4,7 +4,7 @@ import { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableC
 import { createReportPlan } from './plan.js';
 import {reportDesign,ratingBadge} from './design.js';
 import { stripImageMetadata } from '../app/image-metadata.js';
-import { base64ToBytes } from '../app/project.js';
+import { base64ToBytes, parseImageDataUrl } from '../app/project.js';
 const BASE=reportDesign('253F78');
 const rule=(color=BASE.line,size=4)=>({style:BorderStyle.SINGLE,color,size});
 const noBorder={style:BorderStyle.NONE,color:'FFFFFF',size:0};
@@ -46,9 +46,9 @@ function imageBytes(image) {
   return decodedImages.get(image);
 }
 function decodeImageBytes(image) {
-  const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(image.dataUrl ?? '');
-  if (!match || image.mime !== 'image/' + match[1]) throw new Error('Invalid image format: ' + image.id);
-  const data = base64ToBytes(match[2]);
+  const match = parseImageDataUrl(image.dataUrl ?? '');
+  if (!match || image.mime !== 'image/' + match[0]) throw new Error('Invalid image format: ' + image.id);
+  const data = base64ToBytes(match[1]);
   if (!data.length || data.length !== image.bytes || data.length > 2097152) throw new Error('Invalid image bytes: ' + image.id);
   if (image.mime === 'image/png' ? !(data[0] === 137 && data[1] === 80 && data[2] === 78 && data[3] === 71) : !(data[0] === 255 && data[1] === 216 && data[2] === 255)) throw new Error('Invalid image signature: ' + image.id);
   // Older projects can hold screenshots with metadata; the report never carries it.
