@@ -2985,7 +2985,14 @@ Third-party software notices
       say(`"${file.name}" is not a UTF-8 text file. Your current work is unchanged.`, 'error');
       return;
     }
-    const result = await openProjectFile(raw, bytes.length, { appVersion, decodeImage: decodeImageInBrowser });
+    // Large projects take a while to check: say how far it is, at most a few times a second.
+    let shown = 0;
+    const onProgress = (n, total) => {
+      if (total < 20 || (n < total && performance.now() - shown < 250)) return;
+      shown = performance.now();
+      say(`Checking "${file.name}": screenshot ${n} of ${total}…`);
+    };
+    const result = await openProjectFile(raw, bytes.length, { appVersion, decodeImage: decodeImageInBrowser, onProgress });
     if (result.ok && result.project.findings.length > maxFindings) {
       say(`"${file.name}" has ${result.project.findings.length} findings; this ${edition ? edition.toLowerCase() + ' ' : ''}build opens projects with up to ${maxFindings}. Your current work is unchanged.`, 'error');
       return;

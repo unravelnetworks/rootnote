@@ -67,7 +67,20 @@ const BLOCK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const IMAGE_ID = /^IMG-(?!0000)[0-9]{4}$/;
 const DATE = /^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
-const DATA_URL = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/;
+// A screenshot's data URL: data:image/png|jpeg;base64, then base64 characters and at most two
+// '=' at the end. Checked with a prefix match and one character scan: a single pattern over the
+// whole string was slow on large projects (hundreds of MB of base64 when opening).
+const DATA_URL_PREFIX = /^data:image\/(png|jpeg);base64,/;
+const NOT_BASE64 = /[^A-Za-z0-9+/]/;
+/** Returns [type, base64] for a valid screenshot data URL, else null. */
+export function parseImageDataUrl(s) {
+  const m = DATA_URL_PREFIX.exec(s);
+  if (!m) return null;
+  let end = s.length;
+  for (let pad = 0; pad < 2 && end > m[0].length && s.charCodeAt(end - 1) === 61; pad++) end--;
+  if (end === m[0].length || NOT_BASE64.test(s.slice(m[0].length, end))) return null;
+  return [m[1], s.slice(m[0].length)];
+}
 const SHA256 = /^[0-9a-f]{64}$/;
 const CVSS31 = /^CVSS:3\.1\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]$/;
 // Schema v7 also accepts a canonical CVSS 4.0 Base vector (the 11 Base metrics in FIRST order).
@@ -514,6 +527,8 @@ export const imageId = (n) => `IMG-${String(n).padStart(4, '0')}`;
 
 /** Decodes standard base64 to bytes without relying on Buffer (runs in the browser). */
 export function base64ToBytes(b64) {
+  // The built-in decoder where there is one (same result as atob, several times faster).
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -675,7 +690,7 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 async function cleanProjectImages(project) {
   let cleaned = 0;
   for (const im of project.images) {
-    const bytes = base64ToBytes(DATA_URL.exec(im.dataUrl)[2]);
+    const bytes = base64ToBytes(parseImageDataUrl(im.dataUrl)[1]);
     const clean = stripImageMetadata(bytes, im.mime);
     if (!clean) return { error: `${im.id}: the screenshot could not be checked for hidden data. Add it again from the original file.` };
     if (clean === bytes) continue;
@@ -687,10 +702,10 @@ async function cleanProjectImages(project) {
   return { cleaned };
 }
 
-export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage } = {}) {
+export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, onProgress } = {}) {
   const parsed = parseProjectFile(raw, rawBytes);
   if (!parsed.ok) return parsed;
-  const checked = await validateProjectData(parsed.data, { decodeImage });
+  const checked = await validateProjectData(parsed.data, { decodeImage, onProgress });
   if (!checked.ok) return checked;
   const from = checked.project.schemaVersion;
   const images = await cleanProjectImages(checked.project);
@@ -735,7 +750,7 @@ function parseProjectFile(raw, rawBytes) {
   return { ok: true, data };
 }
 
-async function validateProjectData(data, { decodeImage, skipImageData = false } = {}) {
+async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress } = {}) {
   const errors = [];
   const v = data.schemaVersion;
   if (![1, 2, 3, 4, 5, 6, 7].includes(v)) return { ok: false, errors: ['Unsupported schemaVersion.'] };
@@ -869,7 +884,19 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
 
   const imageIds = new Set();
   let maxImage = 0;
+  // Screenshots are decoded a few at a time (the browser decodes off the main thread); at most
+  // four are in flight, so only their bytes are held.
+  const decoding = new Set();
+  const decodeOne = async (path, bytes, mime, sniff) => {
+    try {
+      const d = await decodeImage(bytes, mime);
+      if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
+    } catch {
+      err(path, 'image data cannot be decoded');
+    }
+  };
   for (let i = 0; i < images.length; i++) {
+    onProgress?.(i + 1, images.length);
     const im = images[i];
     const path = `images[${i}]`;
     const errorsBefore = errors.length;
@@ -884,12 +911,12 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
     if (im.originalName !== undefined && (typeof im.originalName !== 'string' || im.originalName.length > 255)) err(`${path}.originalName`, 'invalid');
     if (skipImageData) continue;
     if (im.mime !== 'image/png' && im.mime !== 'image/jpeg') { err(`${path}.mime`, 'must be image/png or image/jpeg'); continue; }
-    const m = typeof im.dataUrl === 'string' ? DATA_URL.exec(im.dataUrl) : null;
+    const m = typeof im.dataUrl === 'string' ? parseImageDataUrl(im.dataUrl) : null;
     if (!m) { err(`${path}.dataUrl`, 'must be a base64 PNG or JPEG data URL'); continue; }
-    if (`image/${m[1]}` !== im.mime) err(`${path}.dataUrl`, 'type does not match mime');
-    if (m[2].length > Math.ceil(LIMITS.imageBytes / 3) * 4) { err(`${path}`, 'image larger than 2 MB'); continue; }
+    if (`image/${m[0]}` !== im.mime) err(`${path}.dataUrl`, 'type does not match mime');
+    if (m[1].length > Math.ceil(LIMITS.imageBytes / 3) * 4) { err(`${path}`, 'image larger than 2 MB'); continue; }
     let bytes;
-    try { bytes = base64ToBytes(m[2]); } catch { err(`${path}.dataUrl`, 'invalid base64'); continue; }
+    try { bytes = base64ToBytes(m[1]); } catch { err(`${path}.dataUrl`, 'invalid base64'); continue; }
     if (bytes.length > LIMITS.imageBytes) err(path, 'image larger than 2 MB');
     if (im.bytes !== bytes.length) err(`${path}.bytes`, 'does not match the image data');
     const sniff = sniffImage(bytes);
@@ -905,14 +932,12 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
     // Decode only an image that passed every cheaper check, so a hostile header
     // cannot make the browser allocate a raster we already know is oversized.
     if (decodeImage && errors.length === errorsBefore) {
-      try {
-        const d = await decodeImage(bytes, im.mime);
-        if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
-      } catch {
-        err(path, 'image data cannot be decoded');
-      }
+      const job = decodeOne(path, bytes, im.mime, sniff).finally(() => decoding.delete(job));
+      decoding.add(job);
+      if (decoding.size >= 4) await Promise.race(decoding);
     }
   }
+  await Promise.all(decoding);
 
   // Rule 6. v1: every reference (evidence or logo) at most once. v2: evidence at most
   // once; the two logo roles may share an image but never use an evidence image.
