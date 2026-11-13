@@ -22,13 +22,13 @@ test('accepts and rejects exactly what the old pattern did', () => {
   ];
   for (const c of cases) {
     const o = OLD.exec(c), n = parseImageDataUrl(c);
-    assert.deepEqual(n, o ? [o[1], o[2]] : null, JSON.stringify(c));
+    assert.deepEqual(n, o ? { type: o[1], base64: o[2] } : null, JSON.stringify(c));
   }
 });
 
 test('a long valid data URL is accepted', () => {
   const b64 = Buffer.alloc(300000, 7).toString('base64');
-  assert.deepEqual(parseImageDataUrl(`data:image/png;base64,${b64}`), ['png', b64]);
+  assert.deepEqual(parseImageDataUrl(`data:image/png;base64,${b64}`), { type: 'png', base64: b64 });
 });
 
 test('the decoder gives the same bytes as atob, and fails where atob fails', () => {

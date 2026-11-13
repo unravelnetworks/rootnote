@@ -46,15 +46,16 @@ function imageBytes(image) {
   return decodedImages.get(image);
 }
 function decodeImageBytes(image) {
-  const match = parseImageDataUrl(image.dataUrl ?? '');
-  if (!match || image.mime !== 'image/' + match[0]) throw new Error('Invalid image format: ' + image.id);
-  const data = base64ToBytes(match[1]);
+  const match = parseImageDataUrl(image.dataUrl ?? '', Math.ceil(2097152 / 3) * 4);
+  if (match?.tooLarge) throw new Error('Invalid image bytes: ' + image.id);
+  if (!match || image.mime !== 'image/' + match.type) throw new Error('Invalid image format: ' + image.id);
+  const data = base64ToBytes(match.base64);
   if (!data.length || data.length !== image.bytes || data.length > 2097152) throw new Error('Invalid image bytes: ' + image.id);
   if (image.mime === 'image/png' ? !(data[0] === 137 && data[1] === 80 && data[2] === 78 && data[3] === 71) : !(data[0] === 255 && data[1] === 216 && data[2] === 255)) throw new Error('Invalid image signature: ' + image.id);
   // Older projects can hold screenshots with metadata; the report never carries it.
   const clean = stripImageMetadata(data, image.mime);
   if (!clean) throw new Error('Screenshot ' + image.id + ' could not be checked for hidden data. Remove it and add it again.');
-  return {data: clean, type: match[1] === 'jpeg' ? 'jpg' : 'png'};
+  return {data: clean, type: match.type === 'jpeg' ? 'jpg' : 'png'};
 }
 function drawing(image, dimensions, name, description) {
   return new ImageRun({...imageBytes(image), transformation: {width:dimensions.width,height:dimensions.height},

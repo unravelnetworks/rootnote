@@ -2987,8 +2987,10 @@ Third-party software notices
     }
     // Large projects take a while to check: say how far it is, at most a few times a second.
     let shown = 0;
+    const progressGen = generation;
     const onProgress = (n, total) => {
-      if (total < 20 || (n < total && performance.now() - shown < 250)) return;
+      // Not once another project has replaced this one.
+      if (generation !== progressGen || total < 20 || (n < total && performance.now() - shown < 250)) return;
       shown = performance.now();
       say(`Checking "${file.name}": screenshot ${n} of ${total}…`);
     };
