@@ -7,14 +7,14 @@
 import {
   createEmptyProject, openProjectFile, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
   findingId, imageId, resolveFindingPrefix, defaultFormats, screenshotRefs, textBlock, imageBlock, detailsTextLength,
-  LIMITS, SEVERITIES, SCORING_MODES, LABEL_KEYS_V6, projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED,
+  LIMITS, megabytes, SEVERITIES, SCORING_MODES, LABEL_KEYS_V6, projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED,
   CUSTOM_LIMITS, customKey, newCustomSectionId, cweErrors, capUnits,
   FINDING_STATUSES, ENGAGEMENT_STATUSES, REFERENCE_LIMITS, referenceTitleErrors, referenceUrlErrors,
 } from '../app/project.js';
 import { h, icon, confirmDialog, choiceDialog, textDialog, downloadBytes, readFileBytes, setRuntimeStyle } from './dom.js';
 import { createEmptyLibrary, openLibraryFile, checkLibrary, serializeLibrary, entryFromFinding, findingFromEntry, mergeLibraries, capEntryName, LIBRARY_LIMITS, LIBRARY_VERSION } from '../app/library.js';
 import { STARTER_LIBRARY, countPrompts } from '../app/starter-library.js';
-import { importImageBytes, imageFilesFrom } from './images.js';
+import { importImageBytes, imageFilesFrom, imageTooLarge } from './images.js';
 import { editImage } from './redact.js';
 import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem } from './engagements.js';
 import { findingsCsv } from '../app/csv.js';
@@ -134,7 +134,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   let engagementRoot = null; // { root, write, tree, summaries: Map(file -> summary), rest: [] }
   let engagement = null; // { customer, name, dir }
   let folderHint = null;
-  // Set while a converted older file is over the 25 MB limit: { name, bytes } of the
+  // Set while a converted older file is over the project size limit: { name, bytes } of the
   // original file, which stays downloadable unchanged. Edits may only shrink the project,
   // and Save and Export are refused, until it fits.
   let recovery = null;
@@ -335,14 +335,17 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   const canIssueFinding = () => doc.project.nextFindingNumber < 999;
   const canIssueImage = () => doc.project.nextImageNumber < 9999;
 
-  // ---- 25 MB budget ----
+  // ---- project size budget (LIMITS.fileBytes, shown as CAP) ----
+  const CAP = megabytes(LIMITS.fileBytes);
+  const SCREENSHOTS_FULL = `This report uses ${LIMITS.evidence} screenshots, the most Rootnote is tested to handle. Remove one you no longer need, or split the engagement into two reports.`;
+  const FINDINGS_FULL = `This report has ${LIMITS.findings} findings, the most Rootnote is tested to handle. Nothing has been removed. To write more, split the engagement into two reports.`;
   // Every change is checked against the exact size of the file Save would write, and
   // undone if it would not fit, so the current work can always be saved.
 
   /** Exact UTF-8 size of the file Save would write (project.js savedSize). */
   const savedBytes = () => savedSize({ ...doc, appVersion });
   const fits = (before = 0) => { const after = savedBytes(); return after <= LIMITS.fileBytes || after <= before; };
-  const BUDGET_MESSAGE = 'That change was not made: the project file would exceed the 25 MB limit. Remove or shrink screenshots first.';
+  const BUDGET_MESSAGE = `This change would take the project over ${CAP}, the most Rootnote is tested to save and reopen. The change was not made and nothing else has changed. Removing a screenshot you no longer need is usually the quickest fix.`;
 
   /** Sets obj[key]; keeps it if the project still fits, or if it does not grow a project
    * that was already over the limit (so shrinking edits always work). */
@@ -374,7 +377,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       undoAttach();
       doc.images = images;
       doc.project.nextImageNumber--;
-      throw new Error(`${record.originalName || 'The image'} was not added: the project file would exceed the 25 MB limit.`);
+      throw new Error(`Adding ${record.originalName ? `"${record.originalName}"` : 'this screenshot'} would take the project over ${CAP}, the most Rootnote is tested to save and reopen. The screenshot was not added and nothing else has changed. Use a smaller image, remove a screenshot you no longer need, or split the engagement into two reports.`);
     }
     return full;
   }
@@ -395,13 +398,13 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   function renderRecovery() {
     if (recovery && savedBytes() <= LIMITS.fileBytes) {
       recovery = null;
-      say('The converted project now fits the 25 MB limit and can be saved and exported.');
+      say(`The converted project now fits the ${CAP} limit and can be saved and exported.`);
     }
     recoveryBanner.hidden = !recovery;
     if (!recovery) { recoveryBanner.replaceChildren(); return; }
     const over = savedBytes() - LIMITS.fileBytes;
     recoveryBanner.replaceChildren(
-      h('p', {}, h('strong', {}, 'Over the 25 MB limit. '),
+      h('p', {}, h('strong', {}, `Over the ${CAP} limit. `),
         `This project was converted from an older version and is now ${(over / 1024).toFixed(1)} KB too large. Remove a screenshot or some text to save or export it. Until then, changes that would make it larger are refused.`),
       h('button', { type: 'button', class: 'secondary', 'data-testid': 'download-original', onclick: () => downloadBytes(recovery.bytes, recovery.name, 'application/json') }, 'Download original file'));
   }
@@ -446,6 +449,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       ),
       h('button', { type: 'button', class: 'add', 'data-testid': 'add-finding', disabled: doc.findings.length >= maxFindings || !canIssueFinding(), onclick: addFinding },
         ...(doc.findings.length >= maxFindings ? [`Limit of ${maxFindings} findings reached`] : [icon('plus'), 'New finding'])),
+      doc.findings.length >= maxFindings && maxFindings === LIMITS.findings ? h('p', { class: 'hint' }, FINDINGS_FULL) : null,
       h('ul', {}, item('library', 'Finding library', h('span', { class: 'fid' }, `${library.entries.length}${libraryDirty ? ' •' : ''}`))),
       h('p', { class: 'navhead' }, 'Output'),
       h('ul', {}, item('preview', 'Preview report'), item('export', 'Check & export')),
@@ -1156,7 +1160,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   // ---- preview ----
   /** The shared report plan for the current project, or null with the reason. */
   function currentPlan() {
-    if (recovery) return { plan: null, reason: 'The preview is not available while the project is over the 25 MB limit.' };
+    if (recovery) return { plan: null, reason: `The preview is not available while the project is over the ${CAP} limit.` };
     try {
       return { plan: createReportPlan(doc, { paperSize: doc.project.paperSize }), reason: null };
     } catch (err) {
@@ -1238,7 +1242,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   const cvssExportBlock = (withCvss) => cvssExportProblem(doc, withCvss);
 
   async function printReport() {
-    if (recovery) { say('Printing is not available while the project is over the 25 MB limit.', 'error'); return; }
+    if (recovery) { say(`Printing is not available while the project is over the ${CAP} limit.`, 'error'); return; }
     const blockedBy = cvssExportBlock();
     if (blockedBy) { say(`Not printed: ${blockedBy}`, 'error'); return; }
     if (view !== 'preview') { view = 'preview'; render(); }
@@ -1393,7 +1397,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         // Only the canonical metric order is stored; the box shows what the user typed until it is re-rendered.
         if (setField(f, 'cvss', parsed.vector)) { showCvssNote(null); syncCalculator(); renderNav(); }
         else {
-          // Refused (the 25 MB budget): the box and menus go back to what is stored, and the
+          // Refused (the size budget): the box and menus go back to what is stored, and the
           // note says the pasted vector was not kept.
           e.target.value = f.cvss || '';
           syncCalculator();
@@ -1596,9 +1600,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   }
   // Restores must fit every limit as a whole, or change nothing.
   const imageRoom = (image) => (doc.images.some((x) => x.id === image.id) ? 'the screenshot is already in the project.'
-    : evidenceCount() + 1 > LIMITS.evidence ? `a project holds at most ${LIMITS.evidence} screenshots.`
-      : doc.images.length + 1 > LIMITS.images ? `a project holds at most ${LIMITS.images} images.` : null);
-  const BUDGET_REASON = 'the project file would exceed the 25 MB limit.';
+    : evidenceCount() + 1 > LIMITS.evidence ? `the report already uses ${LIMITS.evidence} screenshots, the most Rootnote is tested to handle.`
+      : doc.images.length + 1 > LIMITS.images ? `the report already holds ${LIMITS.images} images, the most a project can.` : null);
+  const BUDGET_REASON = `the project would go over ${CAP}, the most Rootnote is tested to save and reopen. Nothing else has changed.`;
   /** Puts a removed Additional details block (and its image) back at its old place. */
   function restoreBlock(fid, at, block, image = null, imageAt = 0) {
     const f = findingById(fid);
@@ -1928,7 +1932,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       ...referenceUrlErrors(r.url).map((m) => `Address ${m}.`),
       ...(units(list) > REFERENCE_LIMITS.units ? [`Titles and addresses of one finding are limited to ${REFERENCE_LIMITS.units} characters.`] : []),
     ];
-    // True when the list was replaced; false when the 25 MB budget refused it (nothing changed).
+    // True when the list was replaced; false when the size budget refused it (nothing changed).
     const commit = (next) => {
       const prev = f.references;
       const set = () => { if (next.length) f.references = next; else delete f.references; };
@@ -2121,8 +2125,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     for (let i = 0; i < files.length; i += DECODE_BATCH) {
       results.push(...await Promise.allSettled(files.slice(i, i + DECODE_BATCH).map(async (file, k) => {
         const label = file.name || 'Pasted image';
-        if (i + k >= slots) throw new Error(`Limit of ${LIMITS.evidence} screenshots reached; ${label} was not added.`);
-        if (file.size > LIMITS.imageBytes) throw new Error(`${label}: ${(file.size / 1048576).toFixed(1)} MB is over the 2 MB limit per screenshot.`);
+        if (i + k >= slots) throw new Error(`${label} was not added. ${SCREENSHOTS_FULL}`);
+        if (file.size > LIMITS.imageBytes) throw new Error(imageTooLarge(label, file.size));
         return importImageBytes(await readFileBytes(file), { name: file.name });
       })));
       if (gen !== generation) break;
@@ -2219,7 +2223,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     // In the over-budget recovery state the report plan refuses the project, as Export does.
     const fill = () => {
       try { text = findingText(doc, doc.findings.indexOf(f), { markdown }); area.value = text; note.textContent = ''; }
-      catch { text = ''; area.value = ''; note.textContent = 'This project is over the 25 MB limit, so it cannot be copied as text. Make it smaller first.'; }
+      catch { text = ''; area.value = ''; note.textContent = `This project is over the ${CAP} limit, so it cannot be copied as text. Make it smaller first.`; }
     };
     const kind = (value, label) => h('label', {}, h('input', { type: 'radio', name: 'copy-kind', value, checked: (value === 'md') === markdown,
       onchange: () => { markdown = value === 'md'; fill(); } }), ` ${label}`);
@@ -2274,7 +2278,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   }
 
   function insertFromLibrary(entry) {
-    if (recovery) { say('Findings cannot be added while the project is over the 25 MB limit.', 'error'); return; }
+    if (recovery) { say(`Findings cannot be added while the project is over the ${CAP} limit.`, 'error'); return; }
     if (doc.findings.length >= maxFindings) { say(`Not added: the limit is ${maxFindings} findings per project.`, 'error'); return; }
     if (!canIssueFinding()) { say('Not added: finding numbering is exhausted for this project.', 'error'); return; }
     const f = findingFromEntry(entry, doc.project.nextFindingNumber);
@@ -2461,7 +2465,7 @@ ${e.title}`.toLowerCase().includes(q));
     const blocked = recovery || failing.length;
     return h('section', { class: 'panel review' },
       h('h1', { 'data-testid': 'review-state' }, blocked ? 'Cannot export yet' : warnings.length ? 'Almost ready' : 'Ready to export'),
-      recovery ? h('p', {}, 'The project is over the 25 MB limit. Remove a screenshot or some text first; the notice at the top says by how much.') : null,
+      recovery ? h('p', {}, `The project is over the ${CAP} limit. Remove a screenshot or some text first; the notice at the top says by how much.`) : null,
       warnings.length
         ? h('div', {}, h('p', { class: 'sub' }, `${warnings.length === 1 ? '1 thing' : `${warnings.length} things`} you may want to look at. ${failing.length ? 'Those marked in red stop the export; the others do not.' : 'None of them stop the export.'}`),
           h('ul', { class: 'warnings', 'data-testid': 'warnings' }, ...[...failing, ...warnings.filter((w) => !failing.includes(w))].map((w) =>
@@ -2604,7 +2608,7 @@ ${e.title}`.toLowerCase().includes(q));
     if (!state) return;
     const projects = first ? state.tree.flatMap((c) => c.engagements.flatMap((e) => e.files.filter((f) => f.kind === 'project'))) : state.rest;
     const { read, skipped, rest } = planBatch(projects);
-    for (const f of skipped) state.summaries.set(f, 'Over the 25 MB project limit; not read.');
+    for (const f of skipped) state.summaries.set(f, `Over the ${CAP} project limit; not read.`);
     for (const f of read) {
       let summary = null;
       try { summary = projectSummary(await (await f.open()).text()); } catch { /* reported below */ }
@@ -2781,7 +2785,7 @@ ${e.title}`.toLowerCase().includes(q));
 
   async function runExport(paperSize, { download = false } = {}) {
     if (exporting) return;
-    if (recovery) { say('Export is not available while the project is over the 25 MB limit. Remove a screenshot or some text first.', 'error'); return; }
+    if (recovery) { say(`Export is not available while the project is over the ${CAP} limit. Remove a screenshot or some text first.`, 'error'); return; }
     const blockedBy = cvssExportBlock();
     if (blockedBy) { say(`Not exported: ${blockedBy}`, 'error'); return; }
     exporting = true;
@@ -2842,7 +2846,7 @@ ${e.title}`.toLowerCase().includes(q));
   function takeFormatNotice() {
     if (!formatNotice) return '';
     formatNotice = false;
-    return ' It was saved in project format 7, which Rootnote 0.1.x cannot open.';
+    return ' It was saved in project format 8, which Rootnote 0.2.x and earlier cannot open.';
   }
 
   // savedBytes() relies on every toISOString() having the placeholder's length (years 0-9999).
@@ -2861,7 +2865,7 @@ ${e.title}`.toLowerCase().includes(q));
     const savedAt = new Date().toISOString();
     const bytes = new TextEncoder().encode(serialize(savedAt));
     if (bytes.length > LIMITS.fileBytes) {
-      say(`The project is ${(bytes.length / 1048576).toFixed(1)} MB, over the 25 MB limit. Remove or shrink screenshots before saving.`, 'error');
+      say(`The project is ${(bytes.length / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
       return 'too-big';
     }
     const name = `${fileStem()}.rootnote.json`;
@@ -2975,7 +2979,7 @@ Third-party software notices
   async function openFile(file) {
     const gen = generation;
     const rev = revision;
-    if (file.size > LIMITS.fileBytes) { say(`"${file.name}" is over the 25 MB project limit. Your current work is unchanged.`, 'error'); return; }
+    if (file.size > LIMITS.fileBytes) { say(`"${file.name}" is over the ${CAP} project limit. Your current work is unchanged.`, 'error'); return; }
     say(`Checking "${file.name}"…`);
     const bytes = await readFileBytes(file);
     let raw;
@@ -3024,8 +3028,8 @@ Third-party software notices
     // Screenshots that still carried hidden data were cleaned on open; saving keeps the clean copy.
     const cleaned = cleanedNote(result.cleanedImages);
     if (cleaned) markDirty();
-    if (result.overBudgetBytes > 0) say(`Opened "${file.name}" (${counts}) and converted it from an older version. It is now over the 25 MB limit; see the notice above.${cleaned}`, 'error');
-    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}) and converted it from an older version. This version saves project format 7. Rootnote 0.1.x cannot open files saved by it, even when all findings use CVSS 3.1. Keep your original file or use Save as to save a copy.${cleaned}`);
+    if (result.overBudgetBytes > 0) say(`Opened "${file.name}" (${counts}) and converted it from an older version. It is now over the ${CAP} limit; see the notice above.${cleaned}`, 'error');
+    else if (result.migratedFrom) say(`Opened "${file.name}" (${counts}). Rootnote converted this project from an older version. It now uses this version's limits: up to ${LIMITS.findings} findings and ${LIMITS.evidence} screenshots. When you save, it is written as project format 8. Rootnote 0.2.x and earlier cannot open that. If you still need the older version, keep your original file or use Save as.${cleaned}`);
     else say(`Opened "${file.name}" (${counts}).${cleaned}`, 'info', { fade: !cleaned });
     render();
     return true;
@@ -3170,7 +3174,7 @@ Third-party software notices
     say('Checking the recovery draft…');
     const result = await openProjectFile(draft.json, new TextEncoder().encode(draft.json).length, { appVersion, decodeImage: decodeImageInBrowser });
     if (!result.ok || result.overBudgetBytes > 0) {
-      say(`The recovery draft cannot be opened (${(result.errors || ['over the 25 MB limit']).slice(0, 2).join(' · ')}). It is still stored; discard it to remove it.`, 'error');
+      say(`The recovery draft cannot be opened (${(result.errors || [`over the ${CAP} limit`]).slice(0, 2).join(' · ')}). It is still stored; discard it to remove it.`, 'error');
       return;
     }
     if (result.project.findings.length > maxFindings) { // same rule as Open

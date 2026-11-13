@@ -60,13 +60,23 @@ test('the summary reads title, client, status and counts, and refuses what is no
   assert.equal(Object.prototype.toString.call({}), '[object Object]');
 });
 
-test('a scan reads at most 50 files or 200 MiB at a time and never reads files over 25 MiB', () => {
+test('a scan reads at most 50 files or 200 MiB at a time and never reads files over 256 MiB', () => {
   const files = (n, size) => Array.from({ length: n }, (_, i) => ({ name: `p${i}`, size }));
   let b = planBatch(files(60, 1000));
   assert.equal(b.read.length, ENGAGEMENT_LIMITS.batchFiles);
   assert.equal(b.rest.length, 10);
   b = planBatch(files(20, 20 * 1024 * 1024));
   assert.equal(b.read.length, 10, '10 × 20 MiB = 200 MiB');
-  b = planBatch([{ name: 'big', size: 26 * 1024 * 1024 }, { name: 'ok', size: 10 }]);
+  const MiB = 1024 * 1024;
+  b = planBatch([{ name: 'big', size: 256 * MiB + 1 }, { name: 'ok', size: 10 }]);
   assert.deepEqual([b.skipped.map((x) => x.name), b.read.map((x) => x.name), b.rest.length], [['big'], ['ok'], 0]);
+  assert.equal(ENGAGEMENT_LIMITS.projectBytes, 268435456);
+  // A project larger than the batch budget (but within the project limit) is read on its own.
+  b = planBatch([{ name: 'large', size: 256 * MiB }, { name: 'next', size: 10 }]);
+  assert.deepEqual([b.read.map((x) => x.name), b.rest.map((x) => x.name)], [['large'], ['next']]);
+  // Small files before it go first; the large one starts the next batch; every batch makes progress.
+  let rest = [{ name: 's1', size: 10 }, { name: 's2', size: 10 }, { name: 'large', size: 230 * MiB }, { name: 'too-big', size: 300 * MiB }, { name: 's3', size: 10 }];
+  const batches = [];
+  for (let k = 0; rest.length && k < 10; k++) { b = planBatch(rest); batches.push([b.read.map((x) => x.name), b.skipped.map((x) => x.name)]); rest = b.rest; }
+  assert.deepEqual(batches, [[['s1', 's2'], []], [['large'], []], [['s3'], ['too-big']]]);
 });

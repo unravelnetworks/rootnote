@@ -7,7 +7,8 @@ import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import {
   createEmptyProjectV3 as createEmptyProject, createEmptyProjectV2, migrateV2toV3, validateProjectFile, openProjectFile, screenshotRefs,
-  detailsTextLength, textBlock, imageBlock, newBlockId, savedSize, findingId, imageId, LIMITS, FORMAT_KEYS, projectFromSettings, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7,
+  detailsTextLength, textBlock, imageBlock, newBlockId, savedSize, findingId, imageId, LIMITS, FORMAT_KEYS, projectFromSettings, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, migrateV7toV8,
+  LIMITS_V7,
 } from '../src/app/project.js';
 
 const schema = JSON.parse(await fs.readFile(new URL('../schema/project.v3.schema.json', import.meta.url), 'utf8'));
@@ -130,7 +131,7 @@ rejects('image in a disabled section still counted', (p) => {
   p.project.sections.finding.find((s) => s.key === 'details').enabled = false;
   p.findings[0].evidence = ['IMG-0001']; p.images.splice(1, 1);
 }, /IMG-0001 is used more than once/);
-rejects('newer schema 8', (p) => { p.schemaVersion = 8; }, /newer version/);
+rejects('newer schema 9', (p) => { p.schemaVersion = 9; }, /newer version/);
 
 test('30 screenshot references across inline blocks and galleries are allowed; 31 refused', async () => {
   const p = createEmptyProject();
@@ -182,7 +183,7 @@ test('v2 -> v3: exact details text and format in one block, absent -> [], everyt
   assert.equal(r.overBudgetBytes, 0);
   // Opening goes on to v4; the v3 step is checked here, the v4 step in project-v4.test.
   const v3 = migrateV2toV3(v2, { appVersion: '0.3.0' });
-  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(v3, { appVersion: '0.3.0' }), { appVersion: '0.3.0' }), { appVersion: '0.3.0' }), { appVersion: '0.3.0' }));
+  assert.deepEqual(r.project, migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(v3, { appVersion: '0.3.0' }), { appVersion: '0.3.0' }), { appVersion: '0.3.0' }), { appVersion: '0.3.0' })));
   assert.equal(v3.schemaVersion, 3);
   assert.equal(v3.appVersion, '0.3.0');
   assert.deepEqual(v3.findings[0].details, [{ id: 'B-F-001-details', type: 'text', text: before.findings[0].details, format: 'code' }]);
@@ -207,10 +208,10 @@ test('a v3 file opens converted through v4, v5 and v6 to v7, with only the v4 to
   const r = await open(p);
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 3);
-  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(JSON.parse(JSON.stringify(p)))))));
+  assert.deepEqual(r.project, migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(JSON.parse(JSON.stringify(p))))))));
 });
 
-test('over budget: a converted v2 opens in recovery, the same project as native v4 is refused', async () => {
+test('a v2 near its 25 MiB bound converts within the v8 limit (no recovery); the result opens natively', async () => {
   const p = createEmptyProjectV2(new Date('2026-11-01T00:00:00Z'));
   const big = png(1000, 690);
   p.images = Array.from({ length: 9 }, (_, i) => image(i + 1, big, 1000, 690));
@@ -219,9 +220,9 @@ test('over budget: a converted v2 opens in recovery, the same project as native 
     description: '', details: '', impact: '', recommendation: '', formats: { ...fmt }, evidence: i === 0 ? p.images.map((im) => im.id) : [] }));
   p.project.nextFindingNumber = 21;
   p.project.nextImageNumber = 10;
-  const growth = savedSize(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(p)))))) - savedSize(p); // to the current schema
+  const growth = savedSize(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(p))))))) - savedSize(p); // to the current schema
   assert.ok(growth > 500, `growth ${growth}`);
-  let need = LIMITS.fileBytes - Math.floor(growth / 2) - Buffer.byteLength(JSON.stringify(p));
+  let need = LIMITS_V7.fileBytes - Math.floor(growth / 2) - Buffer.byteLength(JSON.stringify(p));
   for (const f of p.findings) for (const k of ['description', 'impact', 'recommendation', 'details']) {
     const add = Math.min(need, LIMITS.text - f[k].length);
     if (add > 0) { f[k] += 'a'.repeat(add); need -= add; }
@@ -230,10 +231,10 @@ test('over budget: a converted v2 opens in recovery, the same project as native 
   const r = await open(p);
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 2);
-  assert.ok(r.overBudgetBytes > 0 && r.overBudgetBytes <= growth, `over ${r.overBudgetBytes}`);
+  assert.equal(r.overBudgetBytes, 0);
+  assert.ok(savedSize(r.project) > LIMITS_V7.fileBytes, 'over the old bound after conversion');
   const native = await open(r.project);
-  assert.equal(native.ok, false);
-  assert.match(native.errors[0], /limit is 26214400/);
+  assert.equal(native.ok, true, JSON.stringify(native.errors));
 });
 
 test('an invalid v2 file is refused before conversion', async () => {

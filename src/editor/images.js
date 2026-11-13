@@ -10,11 +10,14 @@ import { stripImageMetadata, imageOrientation } from '../app/image-metadata.js';
  * concurrent imports can never reserve the same id.
  * Order matters: cheap checks first, full decode last, so oversized rasters are never decoded.
  */
+/** The refusal for a screenshot file over the per-image size. */
+export const imageTooLarge = (label, size) => `${label}: This image is ${(size / 1048576).toFixed(1)} MB. The most Rootnote accepts is ${LIMITS.imageBytes / 1048576} MB per image. A full-screen PNG is usually much smaller saved as JPEG, or cropped to the part that matters.`;
+
 export async function importImageBytes(bytes, { name = '' } = {}) {
   const label = name || 'Pasted image';
   if (bytes.length === 0) throw new Error(`${label}: the file is empty.`);
   if (bytes.length > LIMITS.imageBytes) {
-    throw new Error(`${label}: ${(bytes.length / 1048576).toFixed(1)} MB is over the 2 MB limit per screenshot.`);
+    throw new Error(imageTooLarge(label, bytes.length));
   }
   const sniff = sniffImage(bytes);
   if (!sniff) throw new Error(`${label}: only PNG and JPEG screenshots are supported.`);
@@ -27,8 +30,12 @@ export async function importImageBytes(bytes, { name = '' } = {}) {
   const clean = stripImageMetadata(bytes, mime);
   if (!clean) throw new Error(`${label}: the file could not be checked for hidden data, so it was not added.`);
   bytes = clean;
-  if (width < 1 || height < 1 || width > LIMITS.imageSide || height > LIMITS.imageSide || width * height > LIMITS.imagePixels) {
-    throw new Error(`${label}: ${width}×${height} is over the 16 megapixel / 16000 px limit.`);
+  if (width < 1 || height < 1) throw new Error(`${label}: only PNG and JPEG screenshots are supported.`);
+  if (width > LIMITS.imageSide || height > LIMITS.imageSide) {
+    throw new Error(`${label}: This image is ${Math.max(width, height).toLocaleString('en-US')} pixels on its longest side. The most Rootnote accepts is ${LIMITS.imageSide.toLocaleString('en-US')}. A tall full-page capture can be split into parts.`);
+  }
+  if (width * height > LIMITS.imagePixels) {
+    throw new Error(`${label}: This image is ${Math.round(width * height / 1e6)} megapixels. The most Rootnote accepts is ${LIMITS.imagePixels / 1e6} megapixels. Cropping to the part that matters is usually enough.`);
   }
   let decoded;
   try {

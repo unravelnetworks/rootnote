@@ -6,8 +6,10 @@
 import { stripImageMetadata } from './image-metadata.js';
 
 export const FORMAT = 'fieldnote-project';
-export const SCHEMA_VERSION = 7;
-export const LIMITS = Object.freeze({
+export const SCHEMA_VERSION = 8;
+// Bounds of schema v1-v7 files (v1 also allows at most 31 images). Frozen: older files are
+// checked against the bounds they were written under.
+export const LIMITS_V7 = Object.freeze({
   fileBytes: 26214400,
   imageBytes: 2097152,
   imagePixels: 16000000,
@@ -23,6 +25,18 @@ export const LIMITS = Object.freeze({
   text: 20000,
   detailBlocks: 100,
 });
+// Schema v8: only the size of a report changes (tested up to 150 findings, 400 screenshots and
+// 256 MB on Windows). Every image is a screenshot or a logo, so 402 images at most.
+export const LIMITS_V8 = Object.freeze({ ...LIMITS_V7, fileBytes: 268435456, findings: 150, evidence: 400, images: 402 });
+/** The limits of the current format: what this version saves and edits. */
+export const LIMITS = LIMITS_V8;
+/** The bounds a file of this schema version is checked against, or null for an unknown version. */
+export function limitsForVersion(v) {
+  return v === 8 ? LIMITS_V8 : Number.isInteger(v) && v >= 1 && v <= 7 ? LIMITS_V7 : null;
+}
+/** A size in the app's unit: binary MB, as the app has always shown them. */
+export const megabytes = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+const fileTooLarge = (rawBytes, limit) => ({ ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${limit} (${megabytes(limit)}).`] });
 export const SEVERITIES = Object.freeze(['Critical', 'High', 'Medium', 'Low', 'Informational']);
 export const SCORING_MODES = Object.freeze(['severity', 'risk', 'cvss', 'severity+cvss', 'risk+cvss']);
 export const REPORT_SECTIONS = Object.freeze(['executiveSummary', 'engagement', 'scope', 'findingsSummary']);
@@ -207,7 +221,7 @@ function defaultSettings({ migrated }) {
 const noLogo = () => ({ imageId: null, front: true, header: false, footer: false });
 
 /** New projects are schema v7 (createEmptyProjectV7). */
-export const createEmptyProject = (now = new Date()) => createEmptyProjectV7(now);
+export const createEmptyProject = (now = new Date()) => createEmptyProjectV8(now);
 
 /** Schema v3 empty project, kept for tests and fixtures of the v3 format. Screenshots go into
  * Additional details, so the separate Evidence gallery section starts disabled (v3 notes). */
@@ -421,6 +435,22 @@ export function migrateV6toV7(v6, { appVersion } = {}) {
   if (appVersion !== undefined) out.appVersion = appVersion;
   else if (v6.appVersion !== undefined) out.appVersion = v6.appVersion;
   return { ...out, createdAt: v6.createdAt, savedAt: v6.savedAt, project, findings: v6.findings.map((f) => structuredClone(f)), images: v6.images.map((im) => ({ ...im })) };
+}
+
+/** Schema v8 empty project: v7 with the larger report limits. */
+export function createEmptyProjectV8(now = new Date()) {
+  const p = createEmptyProjectV7(now);
+  p.schemaVersion = 8;
+  return p;
+}
+
+/** Converts a validated schema v7 project to v8 without changing any content: only the limits
+ * a v8 file is checked against are larger. */
+export function migrateV7toV8(v7, { appVersion } = {}) {
+  const out = { format: FORMAT, schemaVersion: 8 };
+  if (appVersion !== undefined) out.appVersion = appVersion;
+  else if (v7.appVersion !== undefined) out.appVersion = v7.appVersion;
+  return { ...out, createdAt: v7.createdAt, savedAt: v7.savedAt, project: structuredClone(v7.project), findings: v7.findings.map((f) => structuredClone(f)), images: v7.images.map((im) => ({ ...im })) };
 }
 
 /** At most `max` UTF-16 units, never splitting a surrogate pair (the validators' length rule). */
@@ -651,7 +681,7 @@ export async function validateProjectFile(raw, rawBytes, { decodeImage } = {}) {
 /** Validates a native schema v4 file in full (every image included) and refuses any other
  * version (used by the fixtures and the exporter tests). */
 export async function validateProjectFileV4(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -661,7 +691,7 @@ export async function validateProjectFileV4(raw, rawBytes, { decodeImage } = {})
 
 /** Validates a native schema v7 file in full and refuses any other version. */
 export async function validateProjectFileV7(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -669,9 +699,19 @@ export async function validateProjectFileV7(raw, rawBytes, { decodeImage } = {})
   return validateProjectData(data, { decodeImage });
 }
 
+/** Validates a native schema v8 file in full and refuses any other version. */
+export async function validateProjectFileV8(raw, rawBytes, { decodeImage } = {}) {
+  if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
+  let data;
+  try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
+  if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
+  if (data.schemaVersion !== 8) return { ok: false, errors: ['Not a schema v8 project file.'] };
+  return validateProjectData(data, { decodeImage });
+}
+
 /** Validates a native schema v6 file in full and refuses any other version. */
 export async function validateProjectFileV6(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -681,7 +721,7 @@ export async function validateProjectFileV6(raw, rawBytes, { decodeImage } = {})
 
 /** Validates a native schema v5 file in full and refuses any other version. */
 export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -729,7 +769,7 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, 
   if (from === SCHEMA_VERSION) {
     const size = savedSize(appVersion === undefined ? checked.project : { ...checked.project, appVersion });
     if (size > LIMITS.fileBytes) {
-      return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+      return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (${megabytes(LIMITS.fileBytes)}).`] };
     }
     return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages };
   }
@@ -738,8 +778,9 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, 
   const v4 = from <= 3 ? migrateV3toV4(v3, { appVersion }) : checked.project;
   const v5 = from <= 4 ? migrateV4toV5(v4, { appVersion }) : checked.project;
   const v6 = from <= 5 ? migrateV5toV6(v5, { appVersion }) : checked.project;
-  const project = migrateV6toV7(v6, { appVersion });
-  // Images were fully checked in the file's own version; the v7 pass checks only the
+  const v7 = from <= 6 ? migrateV6toV7(v6, { appVersion }) : checked.project;
+  const project = migrateV7toV8(v7, { appVersion });
+  // Images were fully checked in the file's own version; the v8 pass checks only the
   // converted structure. skipImageData is internal and cannot be set by callers or files.
   const again = await validateProjectData(project, { skipImageData: true });
   if (!again.ok) return { ok: false, errors: ['The file could not be converted to the current format.', ...again.errors] };
@@ -747,9 +788,9 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, 
 }
 
 function parseProjectFile(raw, rawBytes) {
-  if (rawBytes > LIMITS.fileBytes) {
-    return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
-  }
+  // Before parsing, the largest cap of any version; after, the cap of the file's own version,
+  // so an older file never becomes valid just because it could convert to a larger format.
+  if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
   let data;
   try {
     data = JSON.parse(raw);
@@ -762,13 +803,16 @@ function parseProjectFile(raw, rawBytes) {
   if (Number.isInteger(data.schemaVersion) && data.schemaVersion > SCHEMA_VERSION) {
     return { ok: false, errors: [`File was saved by a newer version (schema ${data.schemaVersion}); this build reads schema ${SCHEMA_VERSION}.`], newer: true };
   }
+  const own = limitsForVersion(data.schemaVersion);
+  if (own && rawBytes > own.fileBytes) return fileTooLarge(rawBytes, own.fileBytes);
   return { ok: true, data };
 }
 
 async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress } = {}) {
   const errors = [];
   const v = data.schemaVersion;
-  if (![1, 2, 3, 4, 5, 6, 7].includes(v)) return { ok: false, errors: ['Unsupported schemaVersion.'] };
+  const L = limitsForVersion(v);
+  if (!L) return { ok: false, errors: ['Unsupported schemaVersion.'] };
 
   // At most 100 messages (5 are shown): a hostile file with millions of bad entries must not
   // build millions of strings.
@@ -839,11 +883,11 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
 
   const findings = Array.isArray(data.findings) ? data.findings : (err('findings', 'must be a list'), []);
   const images = Array.isArray(data.images) ? data.images : (err('images', 'must be a list'), []);
-  const maxImages = v === 1 ? V1_MAX_IMAGES : LIMITS.images;
-  if (findings.length > LIMITS.findings) err('findings', `more than ${LIMITS.findings}`);
+  const maxImages = v === 1 ? V1_MAX_IMAGES : L.images;
+  if (findings.length > L.findings) err('findings', `more than ${L.findings}`);
   if (images.length > maxImages) err('images', `more than ${maxImages}`);
   // Over the limit, the lists are not walked at all (a 24 MB file can hold 12 million entries).
-  if (findings.length > LIMITS.findings || images.length > maxImages) return { ok: false, errors };
+  if (findings.length > L.findings || images.length > maxImages) return { ok: false, errors };
 
   const findingIds = new Set();
   const evidenceRefs = new Map();
@@ -889,7 +933,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
       else f.affectedAssets.forEach((a, j) => line(a, `${path}.affectedAssets[${j}]`, true));
     }
     if (!Array.isArray(f.evidence)) return err(`${path}.evidence`, 'must be a list');
-    if (f.evidence.length > LIMITS.evidence) return err(`${path}.evidence`, `more than ${LIMITS.evidence}`);
+    if (f.evidence.length > L.evidence) return err(`${path}.evidence`, `more than ${L.evidence}`);
     f.evidence.forEach((id, j) => { if (typeof id !== 'string' || !IMAGE_ID.test(id)) err(`${path}.evidence[${j}]`, 'invalid image id'); });
     // Rule 6/8: gallery entries and (v3) image blocks are one pool of screenshot references.
     for (const ref of (v >= 3 ? screenshotRefs(f) : f.evidence.map((imageId) => ({ imageId })))) {
@@ -898,7 +942,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
       evidenceRefs.set(ref.imageId, (evidenceRefs.get(ref.imageId) || 0) + 1);
     }
   });
-  if (evidenceCount > LIMITS.evidence) err('findings', `${evidenceCount} screenshot references; the limit is ${LIMITS.evidence}`);
+  if (evidenceCount > L.evidence) err('findings', `${evidenceCount} screenshot references; the limit is ${L.evidence}`);
 
   const imageIds = new Set();
   let maxImage = 0;

@@ -1,6 +1,6 @@
 // Shared content and intended geometry for DOCX and approximate browser preview.
 // Pure ESM: no DOM, canvas, docx, I/O, or application-state mutations.
-import { resolveFindingPrefix, REPORT_SECTIONS, FINDING_SECTIONS, REPORT_SECTIONS_V4, REPORT_SECTIONS_V5, FINDING_SECTIONS_V4, SCORING_MODES, LIMITS, savedSize, screenshotRefs, detailsTextLength, validateReferences,
+import { resolveFindingPrefix, REPORT_SECTIONS, FINDING_SECTIONS, REPORT_SECTIONS_V4, REPORT_SECTIONS_V5, FINDING_SECTIONS_V4, SCORING_MODES, LIMITS, limitsForVersion, savedSize, screenshotRefs, detailsTextLength, validateReferences,
   CUSTOM_LIMITS, CUSTOM_SECTION_ID, customKey, customTitleErrors, cweErrors, vulnerabilityTypeErrors } from '../app/project.js';
 import { parseCvss, cvssLabel, reportCvssVersion, ratingCounts, formatFindingStatus, formatEngagementStatus, findingStatusCounts } from '../scoring/index.js';
 import { reportDesign, ratingBadge, cvssBadge } from './design.js';
@@ -112,8 +112,13 @@ function partsFor(image, figure, geometry, labels) {
 }
 
 export function createReportPlan(project, { paperSize = project?.project?.paperSize } = {}) {
-  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6,7].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v7 project and A4/Letter paper are required.');
-  if (!Array.isArray(project.findings) || project.findings.length > 20 || !Array.isArray(project.images) || project.images.length > 32 || savedSize(project) > LIMITS.fileBytes) throw new Error('Project exceeds supported bounds.');
+  if (project?.format !== 'fieldnote-project' || ![2,3,4,5,6,7,8].includes(project.schemaVersion) || !PAPERS[paperSize]) throw new Error('A validated schema v2-v8 project and A4/Letter paper are required.');
+  // The bounds of the project's own format version, with the reason when one is passed.
+  const L = limitsForVersion(project.schemaVersion);
+  if (!Array.isArray(project.findings) || !Array.isArray(project.images)) throw new Error('Project exceeds supported bounds.');
+  if (project.findings.length > L.findings) throw new Error(`the report has ${project.findings.length} findings; format ${project.schemaVersion} holds at most ${L.findings}.`);
+  if (project.images.length > L.images) throw new Error(`the report has ${project.images.length} images; format ${project.schemaVersion} holds at most ${L.images}.`);
+  if (savedSize(project) > L.fileBytes) throw new Error(`the project file would be larger than format ${project.schemaVersion} allows.`);
   const p = project.project, mode = p.scoring.mode, v4=project.schemaVersion>=4;
   if (!SCORING_MODES.includes(mode)) throw new Error('Unsupported scoring mode.');
   const labels = Object.fromEntries(Object.entries(p.labels).map(([key, value]) => [key, txt(value)]));
@@ -139,7 +144,8 @@ export function createReportPlan(project, { paperSize = project?.project?.paperS
     imageMap.set(image.id, { ...image });
   }
   const refs = project.findings.flatMap(f => screenshotRefs(f).map(r => r.imageId));
-  if (refs.length > 30 || new Set(refs).size !== refs.length || refs.some(id => !imageMap.has(id))) throw new Error('Invalid evidence references.');
+  if (refs.length > L.evidence) throw new Error(`the report has ${refs.length} screenshots; format ${project.schemaVersion} holds at most ${L.evidence}.`);
+  if (new Set(refs).size !== refs.length || refs.some(id => !imageMap.has(id))) throw new Error('Invalid evidence references.');
   const ids = new Set();
   for (const f of project.findings) {
     if (!/^F-(?!000)[0-9]{3}$/.test(f.id) || ids.has(f.id)) throw new Error('Invalid or duplicate finding id.');
