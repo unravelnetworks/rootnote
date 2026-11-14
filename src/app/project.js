@@ -780,9 +780,10 @@ export async function openProjectFile(raw, rawBytes, options = {}) {
  * The same as openProjectFile for a project the app already holds as data (the recovery-draft
  * check): `data` must be a fresh object (it is changed in place), `rawBytes` its exact size
  * as saved. `proofs` (the app's own Map; never from a file) records each screenshot this call
- * checks completely, keyed by its data URL with every attribute that check covered; with
- * `useProofs`, a screenshot whose data URL and attributes all match a record is not checked
- * again (every other rule still applies). Opening a file or restoring a draft never uses proofs.
+ * checks completely: its exact data URL and every attribute that check covered, under its id
+ * (only an index; the data URL itself must be identical); with `useProofs`, a screenshot whose
+ * data URL and attributes all match its record is not checked again (every other rule still
+ * applies). Opening a file or restoring a draft never uses proofs.
  */
 export async function openProjectData(data, rawBytes, options = {}) {
   if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
@@ -795,8 +796,9 @@ export async function openProjectData(data, rawBytes, options = {}) {
   return openParsed(data, rawBytes, options);
 }
 
-const proofOf = (im) => ({ mime: im.mime, width: im.width, height: im.height, bytes: im.bytes, sha256: im.sha256 });
-const sameProof = (a, b) => !!a && a.mime === b.mime && a.width === b.width && a.height === b.height && a.bytes === b.bytes && a.sha256 === b.sha256;
+const proofOf = (im) => ({ dataUrl: im.dataUrl, mime: im.mime, width: im.width, height: im.height, bytes: im.bytes, sha256: im.sha256 });
+// Same string objects compare at once; a string from elsewhere is compared in full.
+const sameProof = (a, b) => !!a && a.dataUrl === b.dataUrl && a.mime === b.mime && a.width === b.width && a.height === b.height && a.bytes === b.bytes && a.sha256 === b.sha256;
 
 async function openParsed(data, rawBytes, { appVersion, decodeImage, onProgress, decodedImages = null, proofs = null, useProofs = false } = {}) {
   const proven = new Set();
@@ -808,7 +810,7 @@ async function openParsed(data, rawBytes, { appVersion, decodeImage, onProgress,
   if (images.error) return { ok: false, errors: [images.error] };
   // Recorded only for screenshots checked completely (decoded too) that needed no cleaning,
   // so the record describes exactly the data URL the project now holds.
-  if (proofs && decodeImage) for (const im of complete) if (images.unchanged.has(im)) proofs.set(im.dataUrl, proofOf(im));
+  if (proofs && decodeImage) for (const im of complete) if (images.unchanged.has(im)) proofs.set(im.id, proofOf(im));
   const cleanedImages = images.cleaned;
   if (from === SCHEMA_VERSION) {
     const size = savedSize(appVersion === undefined ? checked.project : { ...checked.project, appVersion });
@@ -1017,7 +1019,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
     if (v >= 2 && !['auto', 'fit', 'split'].includes(im.tallMode)) err(`${path}.tallMode`, 'must be auto, fit or split');
     if (im.originalName !== undefined && (typeof im.originalName !== 'string' || im.originalName.length > 255)) err(`${path}.originalName`, 'invalid');
     if (skipImageData) continue;
-    if (proofs && typeof im.dataUrl === 'string' && sameProof(proofs.get(im.dataUrl), im)) { proven.add(im); continue; }
+    if (proofs && typeof im.dataUrl === 'string' && sameProof(proofs.get(im.id), im)) { proven.add(im); continue; }
     if (im.mime !== 'image/png' && im.mime !== 'image/jpeg') { err(`${path}.mime`, 'must be image/png or image/jpeg'); continue; }
     const m = typeof im.dataUrl === 'string' ? parseImageDataUrl(im.dataUrl, Math.ceil(LIMITS.imageBytes / 3) * 4) : null;
     if (m?.tooLarge) { err(`${path}`, 'image larger than 2 MB'); continue; }

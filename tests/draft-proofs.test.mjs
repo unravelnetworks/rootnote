@@ -67,7 +67,6 @@ test('a screenshot that needed its metadata removed is not recorded', async () =
   const proofs = new Map();
   const r = await openProjectData(p, Buffer.byteLength(JSON.stringify(p)), { appVersion: 't', decodeImage: decoder().decode, proofs, useProofs: true });
   assert.ok(r.ok && r.cleanedImages === 1, (r.errors || []).join(' '));
-  assert.equal(proofs.has(original), false, 'the data with metadata is not recorded');
-  assert.equal(proofs.has(r.project.images.find((x) => x.id === im.id).dataUrl), false, 'nor the cleaned copy, which was not checked');
+  assert.equal(proofs.has(im.id), false, 'neither the data with metadata nor the cleaned copy, which was not checked');
   assert.equal(proofs.size, p.images.length - 1);
 });

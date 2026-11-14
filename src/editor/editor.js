@@ -3158,7 +3158,7 @@ Third-party software notices
       if (!check.ok || check.overBudgetBytes > 0 || check.migratedFrom !== null) return;
       const current = () => gen === generation && rev === revision && epoch === draftState.epoch && draftWanted();
       if (!current()) return; // newer state follows
-      const keep = new Set(check.project.images.map((im) => im.dataUrl));
+      const keep = new Set(check.project.images.map((im) => im.id));
       for (const key of proofs.keys()) if (!keep.has(key)) proofs.delete(key);
       const blob = await partsToBlob(file.parts, { isCurrent: current });
       if (!blob) return;
