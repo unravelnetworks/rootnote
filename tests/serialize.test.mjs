@@ -66,3 +66,12 @@ test('partsToBlob stops when the work is no longer current', async () => {
   const whole = await partsToBlob(parts, { step: 150 });
   assert.equal(await whole.text(), parts.join(''));
 });
+
+test('an app-supplied isPlain is used for each data URL, with the same bytes', async () => {
+  const p = read('sample-project.rootnote.json');
+  let asked = 0;
+  const r = projectParts(p, { isPlain: (im, v) => { asked++; return im.dataUrl === v; } });
+  assert.equal(asked, p.images.length);
+  assert.deepEqual(r, projectParts(p));
+  assert.equal(r.bytes, Buffer.byteLength(JSON.stringify(p)));
+});

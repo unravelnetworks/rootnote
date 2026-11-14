@@ -28,7 +28,7 @@ import { defaultRatingMethodText } from '../app/rating-method.js';
 import { ratingBadge, cvssBadge } from '../export-docx/design.js';
 import { renderPreview } from './preview.js';
 import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft, draftText, sameDraft } from './draft.js';
-import { projectParts, partsToBlob, partsToProject } from '../app/serialize.js';
+import { projectParts, partsToBlob, partsToProject, plainDataUrl } from '../app/serialize.js';
 
 const DECODE_BATCH = 4;
 const CVSS_METRICS = [
@@ -2858,8 +2858,19 @@ ${e.title}`.toLowerCase().includes(q));
 
   /** The project file as of now: string parts (a snapshot; strings do not change) and its
    * exact size in bytes. Same bytes as serialize(savedAt), without one giant string. */
+  // Image records whose data URL is known to be written as it is, with that exact string; a
+  // record that gets new data is scanned again (plainDataUrl). Filled when a file is opened.
+  const plainUrls = new WeakMap();
+  const isPlainImage = (im, url) => {
+    if (plainUrls.get(im) === url) return true;
+    const plain = plainDataUrl(url);
+    if (plain) plainUrls.set(im, url);
+    return plain;
+  };
+  const rememberChecked = (result) => { for (const im of doc.images) if (result.checkedImages?.has(im)) plainUrls.set(im, im.dataUrl); };
+
   function snapshotFile(savedAt) {
-    const split = projectParts({ ...doc, appVersion, savedAt });
+    const split = projectParts({ ...doc, appVersion, savedAt }, { isPlain: isPlainImage });
     if (split) return split;
     const text = serialize(savedAt);
     return { parts: [text], bytes: new TextEncoder().encode(text).length };
@@ -3061,6 +3072,7 @@ Third-party software notices
     if (gen !== generation) return;
     replaceProject(result.project, result.overBudgetBytes > 0 ? { name: file.name, bytes } : null, { converted: !!result.migratedFrom });
     adoptProofs(proofs);
+    rememberChecked(result);
     if (!result.migratedFrom && !(result.overBudgetBytes > 0)) { fileInfo = { kind: 'opened', at: new Date() }; renderFileState(); }
     const counts = `${doc.findings.length} findings, ${evidenceCount()} screenshots`;
     // Screenshots that still carried hidden data were cleaned on open; saving keeps the clean copy.
@@ -3274,6 +3286,7 @@ Third-party software notices
     }
     replaceProject(result.project);
     adoptProofs(proofs);
+    rememberChecked(result);
     draftState.pending = null;
     draftBanner.hidden = true;
     markDirty(); // a draft is not a saved file

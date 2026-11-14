@@ -4,8 +4,15 @@
 // synchronous (the strings are immutable, so the parts are a snapshot); turning them into a
 // Blob is done in small steps so a large project does not hold the page.
 
-// A data URL written by this app's validator: no character JSON would escape.
-const PLAIN_DATA_URL = /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]*={0,2}$/;
+// A PNG or JPEG data URL with only base64 characters after the comma: nothing JSON would
+// escape, and one byte per character. (A search for any other character is several times
+// faster than matching the whole pattern on large strings.)
+const DATA_URL_HEAD = /^data:image\/(?:png|jpeg);base64,/;
+const NOT_BASE64 = /[^A-Za-z0-9+/=]/;
+export const plainDataUrl = (v) => {
+  const head = DATA_URL_HEAD.exec(v);
+  return !!head && !NOT_BASE64.test(v.slice(head[0].length));
+};
 const utf8 = new TextEncoder();
 
 /** Own enumerable keys whose values JSON.stringify writes (it skips undefined, functions, symbols). */
@@ -15,11 +22,13 @@ const plainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray
 /**
  * Splits `project` (a plain object with an `images` array of plain objects) into string parts
  * whose concatenation equals JSON.stringify(project), with each plain data URL as one part.
+ * `isPlain(image, dataUrl)` (optional) decides whether a data URL can be written as it is; the
+ * default scans it (plainDataUrl), and the app can remember the answer per image.
  * Returns { parts, bytes, data } where bytes is the exact UTF-8 length and data lists which
  * parts are data URLs ({ part, image } indexes), or null when the project is not in that
  * shape (the caller then serializes it whole).
  */
-export function projectParts(project) {
+export function projectParts(project, { isPlain = (im, v) => plainDataUrl(v) } = {}) {
   if (!plainObject(project) || !Array.isArray(project.images) || !project.images.every(plainObject)) return null;
   const parts = [];
   const data = [];
@@ -36,7 +45,7 @@ export function projectParts(project) {
       written(im).forEach((k, n) => {
         text += `${n ? ',' : ''}${JSON.stringify(k)}:`;
         const v = im[k];
-        if (k === 'dataUrl' && typeof v === 'string' && PLAIN_DATA_URL.test(v)) {
+        if (k === 'dataUrl' && typeof v === 'string' && isPlain(im, v)) {
           text += '"';
           flush();
           data.push({ part: parts.length, image: j });

@@ -815,7 +815,7 @@ async function openParsed(data, rawBytes, { appVersion, decodeImage, onProgress,
     if (size > LIMITS.fileBytes) {
       return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (${megabytes(LIMITS.fileBytes)}).`] };
     }
-    return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages };
+    return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages, checkedImages: complete };
   }
   const v2 = from === 1 ? migrateV1toV2(checked.project, { appVersion }) : checked.project;
   const v3 = from <= 2 ? migrateV2toV3(v2, { appVersion }) : checked.project;
