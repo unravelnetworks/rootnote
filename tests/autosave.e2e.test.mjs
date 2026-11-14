@@ -239,6 +239,24 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`opt-in
       assert.equal(await b.evaluate(`${snap}.findings.length`), 3);
     });
 
+    for (const [label, record] of [
+      ['in a format this version does not recognise', "{ format: 9, rev: 'future-1', savedAt: '2026-11-14T10:00:00.000Z', bytes: 3, blob: new Blob(['zzz']) }"],
+      ['that is not valid UTF-8', "{ format: 2, rev: 'bad-utf8', savedAt: '2026-11-14T10:00:00.000Z', bytes: 4, blob: new Blob([new Uint8Array([0x7b, 0xff, 0xfe, 0x7d])]) }"],
+    ]) await t.test(`a stored draft ${label} is shown, kept through edits, and removed only by Discard`, async () => {
+      await b.evaluate(IDB(`(s, done) => { const m = s.get('meta'); m.onsuccess = () => { s.put({ enabled: true, epoch: m.result.epoch }, 'meta'); s.put({ ...${record}, epoch: m.result.epoch }, 'draft'); done(); }; }`));
+      const rev = await b.evaluate(`${IDB(`(s, done) => { const d = s.get('draft'); d.onsuccess = () => done(d.result.rev); }`)}`);
+      await fresh();
+      await b.evaluate('window.releaseAll = true; (window.pendingDecodes || []).splice(0).forEach((f) => f())');
+      assert.ok(await b.waitFor("/cannot be opened/.test(document.querySelector('[data-testid=draft-banner]').textContent) && !document.querySelector('[data-testid=draft-banner]').hidden"), 'shown');
+      assert.equal(await b.evaluate("!!document.querySelector('[data-testid=draft-restore]')"), false, 'no Restore');
+      await b.evaluate(type('[data-testid=title]', 'Edited after an unreadable draft'));
+      await sleep(5500);
+      assert.equal(await b.evaluate(`${IDB(`(s, done) => { const d = s.get('draft'); d.onsuccess = () => done(d.result?.rev); }`)}`), rev, 'kept unchanged');
+      await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()");
+      assert.ok(await b.waitFor("document.querySelector('[data-testid=draft-banner]').hidden"));
+      assert.ok(await waitDraft('Edited after an unreadable draft'), 'drafts resume after Discard');
+    });
+
     await t.test('if deleting the draft fails, messages never claim the browser holds nothing', async () => {
       await fresh();
       await b.evaluate("IDBObjectStore.prototype.delete = function () { throw new DOMException('injected', 'UnknownError'); }; 0");

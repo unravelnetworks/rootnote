@@ -2886,7 +2886,13 @@ ${e.title}`.toLowerCase().includes(q));
     // the user saved, and remember which edit that was. The bytes are built afterwards in
     // small steps (partsToBlob), so a large project does not hold the page.
     const savedAt = new Date().toISOString();
-    const file = snapshotFile(savedAt);
+    let file;
+    try {
+      file = snapshotFile(savedAt);
+    } catch (err) {
+      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}.`, 'error');
+      return 'failed';
+    }
     if (file.bytes > LIMITS.fileBytes) {
       say(`The project is ${(file.bytes / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
       return 'too-big';
@@ -3068,8 +3074,11 @@ Third-party software notices
       if (gen !== generation || asked !== revision) { say(`"${file.name}" was not opened: the project changed again meanwhile. Your current work is unchanged.`, 'error'); return; }
     }
     // A converted project over the limit keeps the original file's bytes for Download original.
-    if (result.overBudgetBytes > 0 && !bytes) bytes = await readFileBytes(file);
-    if (gen !== generation) return;
+    if (result.overBudgetBytes > 0 && !bytes) {
+      const before = revision;
+      bytes = await readFileBytes(file);
+      if (gen !== generation || revision !== before) { say(`"${file.name}" was not opened: the project changed meanwhile. Your current work is unchanged.`, 'error'); return; }
+    }
     replaceProject(result.project, result.overBudgetBytes > 0 ? { name: file.name, bytes } : null, { converted: !!result.migratedFrom });
     adoptProofs(proofs);
     rememberChecked(result);
@@ -3226,12 +3235,17 @@ Third-party software notices
           : h('span', { class: 'quiet' }, 'Recovery drafts are not available: this browser offers no storage for this page.')));
   }
 
-  function offerDraft(draft, findings) {
+  /** Offers a stored draft; with `problem`, one that cannot be opened, which is kept as it is
+   * (only Discard). Either way new drafts wait until the user chooses. */
+  function offerDraft(draft, findings, problem = null) {
     draftState.pending = draft;
-    const when = new Date(draft.savedAt).toLocaleString();
-    const fits = findings <= maxFindings;
+    const date = new Date(draft.savedAt);
+    const when = Number.isNaN(date.getTime()) ? 'an earlier session' : date.toLocaleString();
+    const fits = !problem && findings <= maxFindings;
     draftBanner.replaceChildren(
-      h('p', {}, h('strong', {}, 'Recovery draft found. '), fits
+      h('p', {}, h('strong', {}, 'Recovery draft found. '), problem
+        ? `A draft from ${when} is kept in this browser, but it cannot be opened (${problem}). It stays stored unchanged; discard it to remove it. New drafts are paused until you do.`
+        : fits
         ? `A draft from ${when} is kept in this browser. Restore it, or discard it. New drafts are paused until you choose.`
         : `A draft from ${when} with ${findings} findings is kept in this browser, but this ${edition ? `${edition.toLowerCase()} ` : ''}build opens projects with up to ${maxFindings}. It stays stored unchanged; open it in the full version, or discard it. New drafts are paused until you choose.`),
       ...(fits ? [h('button', { type: 'button', 'data-testid': 'draft-restore', onclick: restoreDraft }, 'Restore draft')] : []),
@@ -3317,16 +3331,22 @@ Third-party software notices
       const d = state.draft;
       const gen = generation;
       let check = { ok: false };
+      let problem = null;
       try {
         const stored = await draftText(d, LIMITS.fileBytes);
         check = await openProjectFile(stored.text, stored.bytes, { appVersion, decodeImage: decodeImageInBrowser });
-      } catch { /* unreadable or unknown: not offered, and left as it is */ }
+        if (!check.ok) problem = (check.errors || []).slice(0, 2).join(' · ') || 'it is not a valid project';
+        else if (check.overBudgetBytes > 0) problem = `it is over the ${CAP} limit`;
+      } catch (err) { problem = err?.message || 'it could not be read'; }
       // Offer only if nothing changed meanwhile, here or in another tab: still on, same
-      // epoch and the same draft in the store, same clean project.
+      // epoch and the same draft in the store. A draft that opens is offered only to the same
+      // clean project; one that cannot be opened is shown anyway, so no new draft replaces it.
       let now = null;
-      if (check.ok && check.overBudgetBytes === 0) { try { now = await readDraftState(); } catch { now = null; } }
-      if (now && revision === 0 && gen === generation && !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
-          now.enabled && now.epoch === state.epoch && sameDraft(now.draft, d)) offerDraft(d, check.project.findings.length);
+      try { now = await readDraftState(); } catch { now = null; }
+      const same = now && !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
+        now.enabled && now.epoch === state.epoch && sameDraft(now.draft, d);
+      if (same && problem) offerDraft(d, 0, problem);
+      else if (same && revision === 0 && gen === generation) offerDraft(d, check.project.findings.length);
       else if (now && !now.enabled) draftState.enabled = false;
     }
     showDraftNote();

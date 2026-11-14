@@ -18,10 +18,18 @@ function openDb() {
     if (typeof indexedDB === 'undefined') { reject(new Error('This browser offers no storage for drafts.')); return; }
     let req;
     try { req = indexedDB.open(DB, DB_VERSION); } catch (err) { reject(err); return; }
+    // Once given up on (blocked by an older tab), a connection that opens later is closed at
+    // once, so nothing holds the database without an owner.
+    let abandoned = false;
     req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (abandoned) { db.close(); return; }
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error ?? new Error('Draft storage could not be opened.'));
-    req.onblocked = () => reject(new Error('Draft storage is blocked by another tab.'));
+    req.onblocked = () => { abandoned = true; reject(new Error('Draft storage is blocked by another tab.')); };
   });
 }
 
@@ -99,7 +107,10 @@ export async function discardDraft(epoch) {
 export function sameDraft(a, b) {
   if (!a || !b) return false;
   if (typeof a.rev === 'string' || typeof b.rev === 'string') return a.rev === b.rev && a.epoch === b.epoch;
-  return typeof a.json === 'string' && a.json === b.json;
+  if (typeof a.json === 'string' || typeof b.json === 'string') return a.json === b.json;
+  // A record this version does not recognise: the same if its plain fields and size match.
+  const size = (r) => (r.blob instanceof Blob ? r.blob.size : null);
+  return a.epoch === b.epoch && a.savedAt === b.savedAt && a.bytes === b.bytes && a.format === b.format && size(a) === size(b);
 }
 
 /** The draft's text and its size in bytes; a Blob over `maxBytes` is refused unread.

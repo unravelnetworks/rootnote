@@ -773,7 +773,7 @@ async function cleanProjectImages(project, { skip = null } = {}) {
 export async function openProjectFile(raw, rawBytes, options = {}) {
   const parsed = parseProjectFile(raw, rawBytes);
   if (!parsed.ok) return parsed;
-  return openParsed(parsed.data, rawBytes, options);
+  return openParsed(parsed.data, rawBytes, { ...options, useProofs: false }); // a file is always checked in full
 }
 
 /**

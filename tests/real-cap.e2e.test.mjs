@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createEmptyProject, defaultFormats, findingId, imageId, savedSize, LIMITS } from '../src/app/project.js';
@@ -127,9 +127,14 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       await b.evaluate("(() => { const st = window.setTimeout; window.__held = []; window.setTimeout = (f, d, ...a) => (d ? st(f, d, ...a) : (window.__held.push(() => f(...a)), 0)); window.__release = () => { window.setTimeout = st; window.__held.splice(0).forEach((f) => st(f, 0)); }; })()");
       await b.evaluate("document.querySelector('[data-testid=save]').click()");
       assert.ok(await b.waitFor('window.__held.length > 0', 30000), 'the build did not pause');
+      // A second Save meanwhile is refused; it does not queue another file.
+      await b.evaluate("document.querySelector('[data-testid=save]').click()");
+      assert.ok(await b.waitFor("/still being saved/.test(document.querySelector('.status').textContent)", 5000), await b.evaluate("document.querySelector('.status').textContent"));
       await b.evaluate("(() => { const t = document.querySelector('[data-testid=finding-title]'); t.value = 'Edited during save'; t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); })()");
       await b.evaluate('window.__release()');
       const saved = await waitForFile(dl, /\.rootnote\.json$/, 300000);
+      await new Promise((r) => setTimeout(r, 2000));
+      assert.equal(readdirSync(dl).filter((n) => n.endsWith('.rootnote.json')).length, 1, 'one file');
       assert.ok(await b.waitFor("/changed the project while it was being prepared/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
       assert.equal(await b.evaluate('window.__fieldnote.isDirty()'), true, 'still unsaved');
       const f = JSON.parse(readFileSync(saved, 'utf8'));
