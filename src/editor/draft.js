@@ -3,19 +3,33 @@
 // draft; every write checks them inside its own transaction, so turning the feature off
 // (in this tab or another) can never be undone by a write that was already on its way.
 // Success means the transaction completed, not that a request succeeded.
+//
+// Draft records: 0.3.0 and earlier store the project as a string (`json`); later versions
+// store a Blob (`blob`, format 2) with a unique `rev`. Version 2 of the database changes no
+// data; it stops a still-open older tab (which opens version 1) from reading or overwriting
+// a record it does not understand: its next write fails with an error instead.
 
 const DB = 'fieldnote-recovery';
+const DB_VERSION = 2;
 const STORE = 'kv';
 
 function openDb() {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('This browser offers no storage for drafts.')); return; }
     let req;
-    try { req = indexedDB.open(DB, 1); } catch (err) { reject(err); return; }
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
+    try { req = indexedDB.open(DB, DB_VERSION); } catch (err) { reject(err); return; }
+    // Once given up on (blocked by an older tab), a connection that opens later is closed at
+    // once, so nothing holds the database without an owner.
+    let abandoned = false;
+    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
+    req.onsuccess = () => {
+      const db = req.result;
+      if (abandoned) { db.close(); return; }
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error ?? new Error('Draft storage could not be opened.'));
-    req.onblocked = () => reject(new Error('Draft storage is blocked by another tab.'));
+    req.onblocked = () => { abandoned = true; reject(new Error('Draft storage is blocked by another tab.')); };
   });
 }
 
@@ -37,7 +51,8 @@ async function transact(mode, body) {
 }
 const get = (store, key) => new Promise((resolve, reject) => { const r = store.get(key); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
 
-/** { enabled, epoch, draft: { savedAt, appVersion, bytes, json } | null } */
+/** { enabled, epoch, draft: { savedAt, appVersion, bytes, json } (0.3.0) or
+ * { format: 2, rev, savedAt, appVersion, bytes, blob } | null } */
 export async function readDraftState() {
   return transact('readonly', async (store) => {
     const meta = (await get(store, 'meta')) ?? { enabled: false, epoch: 0 };
@@ -85,4 +100,29 @@ export async function discardDraft(epoch) {
     store.delete('draft');
     return 'ok';
   });
+}
+
+/** The same stored record: by `rev` and epoch for Blob records (two reads of one Blob are
+ * different objects), by the text itself for string records. */
+export function sameDraft(a, b) {
+  if (!a || !b) return false;
+  if (typeof a.rev === 'string' || typeof b.rev === 'string') return a.rev === b.rev && a.epoch === b.epoch;
+  if (typeof a.json === 'string' || typeof b.json === 'string') return a.json === b.json;
+  // A record this version does not recognise: the same if its plain fields and size match.
+  const size = (r) => (r.blob instanceof Blob ? r.blob.size : null);
+  return a.epoch === b.epoch && a.savedAt === b.savedAt && a.bytes === b.bytes && a.format === b.format && size(a) === size(b);
+}
+
+/** The draft's text and its size in bytes; a Blob over `maxBytes` is refused unread.
+ * Rejects for a record this version does not recognise. */
+export async function draftText(record, maxBytes) {
+  if (typeof record?.json === 'string') return { text: record.json, bytes: new TextEncoder().encode(record.json).length };
+  if (record?.format === 2 && record.blob instanceof Blob) {
+    if (record.blob.size > maxBytes) throw new Error(`the draft is ${record.blob.size} bytes, over the limit`);
+    let text = await record.blob.text();
+    // Blob.text() replaces invalid UTF-8; a draft must be valid UTF-8, like a project file.
+    if (text.includes('\uFFFD')) text = new TextDecoder('utf-8', { fatal: true }).decode(await record.blob.arrayBuffer());
+    return { text, bytes: record.blob.size };
+  }
+  throw new Error('the stored draft is in a format this version does not recognise');
 }

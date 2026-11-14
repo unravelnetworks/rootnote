@@ -743,19 +743,24 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 /** Removes hidden metadata from every screenshot of an opened project. Images in older
  * project files were kept byte for byte, so re-saved projects and Chrome/Edge PDFs would
  * carry it. Returns the number cleaned, or an error when one cannot be checked. */
-async function cleanProjectImages(project) {
+async function cleanProjectImages(project, { skip = null } = {}) {
   let cleaned = 0;
-  for (const im of project.images) {
+  const unchanged = new Set();
+  for (let i = 0; i < project.images.length; i++) {
+    const im = project.images[i];
+    if (skip?.has(im)) continue;
+    // A pause now and then, so a large project does not hold the page.
+    if (i % 16 === 15) await new Promise((resolve) => setTimeout(resolve, 0));
     const bytes = base64ToBytes(parseImageDataUrl(im.dataUrl).base64);
     const clean = stripImageMetadata(bytes, im.mime);
     if (!clean) return { error: `${im.id}: the screenshot could not be checked for hidden data. Add it again from the original file.` };
-    if (clean === bytes) continue;
+    if (clean === bytes) { unchanged.add(im); continue; }
     im.dataUrl = `data:${im.mime};base64,${bytesToBase64(clean)}`;
     im.bytes = clean.length;
     im.sha256 = await sha256Hex(clean);
     cleaned++;
   }
-  return { cleaned };
+  return { cleaned, unchanged };
 }
 
 /**
@@ -765,21 +770,54 @@ async function cleanProjectImages(project) {
  * again; every other check still runs. Only the recovery-draft writer passes it: opening a
  * file or a draft always decodes every screenshot.
  */
-export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, onProgress, decodedImages = null } = {}) {
+export async function openProjectFile(raw, rawBytes, options = {}) {
   const parsed = parseProjectFile(raw, rawBytes);
   if (!parsed.ok) return parsed;
-  const checked = await validateProjectData(parsed.data, { decodeImage, onProgress, decodedImages });
+  return openParsed(parsed.data, rawBytes, { ...options, useProofs: false }); // a file is always checked in full
+}
+
+/**
+ * The same as openProjectFile for a project the app already holds as data (the recovery-draft
+ * check): `data` must be a fresh object (it is changed in place), `rawBytes` its exact size
+ * as saved. `proofs` (the app's own Map; never from a file) records each screenshot this call
+ * checks completely: its exact data URL and every attribute that check covered, under its id
+ * (only an index; the data URL itself must be identical); with `useProofs`, a screenshot whose
+ * data URL and attributes all match its record is not checked again (every other rule still
+ * applies). Opening a file or restoring a draft never uses proofs.
+ */
+export async function openProjectData(data, rawBytes, options = {}) {
+  if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
+  if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
+  if (Number.isInteger(data.schemaVersion) && data.schemaVersion > SCHEMA_VERSION) {
+    return { ok: false, errors: [`File was saved by a newer version (schema ${data.schemaVersion}); this build reads schema ${SCHEMA_VERSION}.`], newer: true };
+  }
+  const own = limitsForVersion(data.schemaVersion);
+  if (own && rawBytes > own.fileBytes) return fileTooLarge(rawBytes, own.fileBytes);
+  return openParsed(data, rawBytes, options);
+}
+
+const proofOf = (im) => ({ dataUrl: im.dataUrl, mime: im.mime, width: im.width, height: im.height, bytes: im.bytes, sha256: im.sha256 });
+// Same string objects compare at once; a string from elsewhere is compared in full.
+const sameProof = (a, b) => !!a && a.dataUrl === b.dataUrl && a.mime === b.mime && a.width === b.width && a.height === b.height && a.bytes === b.bytes && a.sha256 === b.sha256;
+
+async function openParsed(data, rawBytes, { appVersion, decodeImage, onProgress, decodedImages = null, proofs = null, useProofs = false } = {}) {
+  const proven = new Set();
+  const complete = new Set();
+  const checked = await validateProjectData(data, { decodeImage, onProgress, decodedImages, proofs: useProofs ? proofs : null, proven, complete });
   if (!checked.ok) return checked;
   const from = checked.project.schemaVersion;
-  const images = await cleanProjectImages(checked.project);
+  const images = await cleanProjectImages(checked.project, { skip: proven });
   if (images.error) return { ok: false, errors: [images.error] };
+  // Recorded only for screenshots checked completely (decoded too) that needed no cleaning,
+  // so the record describes exactly the data URL the project now holds.
+  if (proofs && decodeImage) for (const im of complete) if (images.unchanged.has(im)) proofs.set(im.id, proofOf(im));
   const cleanedImages = images.cleaned;
   if (from === SCHEMA_VERSION) {
     const size = savedSize(appVersion === undefined ? checked.project : { ...checked.project, appVersion });
     if (size > LIMITS.fileBytes) {
       return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (${megabytes(LIMITS.fileBytes)}).`] };
     }
-    return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages };
+    return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages, checkedImages: complete };
   }
   const v2 = from === 1 ? migrateV1toV2(checked.project, { appVersion }) : checked.project;
   const v3 = from <= 2 ? migrateV2toV3(v2, { appVersion }) : checked.project;
@@ -816,7 +854,7 @@ function parseProjectFile(raw, rawBytes) {
   return { ok: true, data };
 }
 
-async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress, decodedImages = null } = {}) {
+async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress, decodedImages = null, proofs = null, proven = null, complete = null } = {}) {
   const errors = [];
   const v = data.schemaVersion;
   const L = limitsForVersion(v);
@@ -957,11 +995,11 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
   // Screenshots are decoded a few at a time (the browser decodes off the main thread); at most
   // four are in flight, so only their bytes are held.
   const decoding = new Set();
-  const decodeOne = async (path, bytes, mime, sniff, key) => {
+  const decodeOne = async (path, bytes, mime, sniff, key, im) => {
     try {
       const d = await decodeImage(bytes, mime);
       if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
-      else decodedImages?.set(key, true);
+      else { decodedImages?.set(key, true); complete?.add(im); }
     } catch {
       err(path, 'image data cannot be decoded');
     }
@@ -981,6 +1019,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
     if (v >= 2 && !['auto', 'fit', 'split'].includes(im.tallMode)) err(`${path}.tallMode`, 'must be auto, fit or split');
     if (im.originalName !== undefined && (typeof im.originalName !== 'string' || im.originalName.length > 255)) err(`${path}.originalName`, 'invalid');
     if (skipImageData) continue;
+    if (proofs && typeof im.dataUrl === 'string' && sameProof(proofs.get(im.id), im)) { proven.add(im); continue; }
     if (im.mime !== 'image/png' && im.mime !== 'image/jpeg') { err(`${path}.mime`, 'must be image/png or image/jpeg'); continue; }
     const m = typeof im.dataUrl === 'string' ? parseImageDataUrl(im.dataUrl, Math.ceil(LIMITS.imageBytes / 3) * 4) : null;
     if (m?.tooLarge) { err(`${path}`, 'image larger than 2 MB'); continue; }
@@ -1004,8 +1043,9 @@ async function validateProjectData(data, { decodeImage, skipImageData = false, o
     // cannot make the browser allocate a raster we already know is oversized.
     // im.sha256 has just been checked against the bytes, so the key names this exact content.
     const decodedKey = `${im.mime}|${sniff.width}x${sniff.height}|${im.sha256}`;
-    if (decodeImage && failures === failuresBefore && !decodedImages?.has(decodedKey)) {
-      const job = decodeOne(path, bytes, im.mime, sniff, decodedKey).finally(() => decoding.delete(job));
+    if (decodeImage && failures === failuresBefore && decodedImages?.has(decodedKey)) complete?.add(im);
+    else if (decodeImage && failures === failuresBefore) {
+      const job = decodeOne(path, bytes, im.mime, sniff, decodedKey, im).finally(() => decoding.delete(job));
       decoding.add(job);
       if (decoding.size >= 4) await Promise.race(decoding);
     }

@@ -5,7 +5,7 @@
 // captured earlier: it re-reads the current project when it commits, and `generation`
 // (bumped by New/Open) and `revision` (bumped by every edit) detect changes meanwhile.
 import {
-  createEmptyProject, openProjectFile, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
+  createEmptyProject, openProjectFile, openProjectData, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
   findingId, imageId, resolveFindingPrefix, defaultFormats, screenshotRefs, textBlock, imageBlock, detailsTextLength,
   LIMITS, megabytes, SEVERITIES, SCORING_MODES, LABEL_KEYS_V6, projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED,
   CUSTOM_LIMITS, customKey, newCustomSectionId, cweErrors, capUnits,
@@ -27,7 +27,8 @@ import { reportMarkdown } from '../app/report-markdown.js';
 import { defaultRatingMethodText } from '../app/rating-method.js';
 import { ratingBadge, cvssBadge } from '../export-docx/design.js';
 import { renderPreview } from './preview.js';
-import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft } from './draft.js';
+import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft, draftText, sameDraft } from './draft.js';
+import { projectParts, partsToBlob, partsToProject, plainDataUrl } from '../app/serialize.js';
 
 const DECODE_BATCH = 4;
 const CVSS_METRICS = [
@@ -2855,41 +2856,84 @@ ${e.title}`.toLowerCase().includes(q));
     return JSON.stringify(out, replacer);
   }
 
+  /** The project file as of now: string parts (a snapshot; strings do not change) and its
+   * exact size in bytes. Same bytes as serialize(savedAt), without one giant string. */
+  // Image records whose data URL is known to be written as it is, with that exact string; a
+  // record that gets new data is scanned again (plainDataUrl). Filled when a file is opened.
+  const plainUrls = new WeakMap();
+  const isPlainImage = (im, url) => {
+    if (plainUrls.get(im) === url) return true;
+    const plain = plainDataUrl(url);
+    if (plain) plainUrls.set(im, url);
+    return plain;
+  };
+  const rememberChecked = (result) => { for (const im of doc.images) if (result.checkedImages?.has(im)) plainUrls.set(im, im.dataUrl); };
+
+  function snapshotFile(savedAt) {
+    const split = projectParts({ ...doc, appVersion, savedAt }, { isPlain: isPlainImage });
+    if (split) return split;
+    const text = serialize(savedAt);
+    return { parts: [text], bytes: new TextEncoder().encode(text).length };
+  }
+
   /** Saves the project. `target` writes to that file handle instead of the current one (an
    * engagement folder). Returns 'saved', 'saved-edited' (written, but the project changed
-   * meanwhile), 'other-project', 'download', 'cancelled', 'busy', 'too-big' or 'failed'. */
+   * meanwhile), 'other-project', 'download', 'download-edited', 'cancelled', 'busy',
+   * 'too-big' or 'failed'. */
   async function saveProject({ saveAs = false, download = false, target = null } = {}) {
     if (saving) { say('The project is still being saved.', 'error'); return 'busy'; }
-    // Serialize synchronously at the moment of the click, so the file holds exactly the
-    // state the user saved, and remember which edit that was.
+    // Take the file synchronously at the moment of the click, so it holds exactly the state
+    // the user saved, and remember which edit that was. The bytes are built afterwards in
+    // small steps (partsToBlob), so a large project does not hold the page.
     const savedAt = new Date().toISOString();
-    const bytes = new TextEncoder().encode(serialize(savedAt));
-    if (bytes.length > LIMITS.fileBytes) {
-      say(`The project is ${(bytes.length / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
+    let file;
+    try {
+      file = snapshotFile(savedAt);
+    } catch (err) {
+      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}.`, 'error');
+      return 'failed';
+    }
+    if (file.bytes > LIMITS.fileBytes) {
+      say(`The project is ${(file.bytes / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
       return 'too-big';
     }
     const name = `${fileStem()}.rootnote.json`;
     // A file from an engagement folder can be written whether or not a save dialog exists.
-    if (!target && (download || (!canPickSaveLocation() && !(projectHandle && !saveAs)))) {
-      downloadBytes(bytes, name, 'application/json');
-      doc.savedAt = savedAt;
-      fileInfo = { kind: 'download', at: new Date() };
-      markClean();
-      // A browser download cannot be confirmed from the page, so say what actually happened.
-      say(`Project file "${name}" sent to your browser's downloads. Check that the download finished and keep a backup copy; ${storageClaim()}.${takeFormatNotice()}`);
-      return 'download';
-    }
+    const toDownload = !target && (download || (!canPickSaveLocation() && !(projectHandle && !saveAs)));
     const gen = generation;
     const rev = revision;
     saving = true;
+    const build = async () => {
+      const blob = await partsToBlob(file.parts);
+      if (blob.size !== file.bytes) throw new Error('the project file could not be prepared');
+      return blob;
+    };
     try {
+      if (toDownload) {
+        downloadBytes(await build(), name, 'application/json');
+        // A browser download cannot be confirmed from the page, so say what actually happened.
+        if (gen !== generation) {
+          say(`Project file "${name}" sent to your browser's downloads with the project as it was when you clicked Save; a different project is open now.`);
+          return 'other-project';
+        }
+        doc.savedAt = savedAt;
+        fileInfo = { kind: 'download', at: new Date() };
+        if (rev === revision) {
+          markClean();
+          say(`Project file "${name}" sent to your browser's downloads. Check that the download finished and keep a backup copy; ${storageClaim()}.${takeFormatNotice()}`);
+          return 'download';
+        }
+        say(`Project file "${name}" sent to your browser's downloads, but you changed the project while it was being prepared. Those changes are not in the file yet; save again.`);
+        return 'download-edited';
+      }
       let handle = target ?? (saveAs ? null : projectHandle);
       if (!handle) {
         // First await of the gesture: the dialog must open before anything else is awaited.
         handle = await pickSaveFile({ suggestedName: name, description: 'Rootnote project', mime: 'application/json', extension: '.json', id: 'fieldnote-project', startIn: folderHint });
         if (!handle) { say('Save cancelled. Nothing was written.'); return 'cancelled'; }
       }
-      await writeToHandle(handle, bytes, { onAsk: () => say(`Your browser is asking whether this page may edit "${handle.name}". Answer its prompt at the top of the window to finish saving.`) });
+      const blob = await build();
+      await writeToHandle(handle, blob, { onAsk: () => say(`Your browser is asking whether this page may edit "${handle.name}". Answer its prompt at the top of the window to finish saving.`) });
       folderHint = handle;
       if (gen !== generation) {
         say(`"${handle.name}" was saved with the project as it was when you clicked Save; a different project is open now.`);
@@ -2906,7 +2950,7 @@ ${e.title}`.toLowerCase().includes(q));
       say(`Saved "${handle.name}", but you changed the project while it was being saved. Those changes are not in the file yet; save again.`);
       return 'saved-edited';
     } catch (err) {
-      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}. You can use Download instead.`, 'error');
+      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}.${toDownload ? '' : ' You can use Download instead.'}`, 'error');
       return 'failed';
     } finally {
       saving = false;
@@ -2981,13 +3025,19 @@ Third-party software notices
     const rev = revision;
     if (file.size > LIMITS.fileBytes) { say(`"${file.name}" is over the ${CAP} project limit. Your current work is unchanged.`, 'error'); return; }
     say(`Checking "${file.name}"…`);
-    const bytes = await readFileBytes(file);
-    let raw;
-    try {
-      raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-      say(`"${file.name}" is not a UTF-8 text file. Your current work is unchanged.`, 'error');
-      return;
+    // The browser decodes the text without holding the page. It replaces invalid UTF-8 with
+    // U+FFFD, so a text holding U+FFFD is decoded again strictly: invalid UTF-8 is refused,
+    // a real U+FFFD is kept.
+    let bytes = null;
+    let raw = await file.text();
+    if (raw.includes('\uFFFD')) {
+      bytes = await readFileBytes(file);
+      try {
+        raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        say(`"${file.name}" is not a UTF-8 text file. Your current work is unchanged.`, 'error');
+        return;
+      }
     }
     // Large projects take a while to check: say how far it is, at most a few times a second.
     let shown = 0;
@@ -2997,7 +3047,8 @@ Third-party software notices
       shown = performance.now();
       say(`Checking "${file.name}": screenshot ${n} of ${total}…`);
     };
-    const result = await openProjectFile(raw, bytes.length, { appVersion, decodeImage: decodeImageInBrowser, onProgress });
+    const proofs = new Map();
+    const result = await openProjectFile(raw, file.size, { appVersion, decodeImage: decodeImageInBrowser, onProgress, proofs });
     if (result.ok && result.project.findings.length > maxFindings) {
       say(`"${file.name}" has ${result.project.findings.length} findings; this ${edition ? edition.toLowerCase() + ' ' : ''}build opens projects with up to ${maxFindings}. Your current work is unchanged.`, 'error');
       return;
@@ -3022,7 +3073,15 @@ Third-party software notices
       // The answer covers the project as it was when asked.
       if (gen !== generation || asked !== revision) { say(`"${file.name}" was not opened: the project changed again meanwhile. Your current work is unchanged.`, 'error'); return; }
     }
+    // A converted project over the limit keeps the original file's bytes for Download original.
+    if (result.overBudgetBytes > 0 && !bytes) {
+      const before = revision;
+      bytes = await readFileBytes(file);
+      if (gen !== generation || revision !== before) { say(`"${file.name}" was not opened: the project changed meanwhile. Your current work is unchanged.`, 'error'); return; }
+    }
     replaceProject(result.project, result.overBudgetBytes > 0 ? { name: file.name, bytes } : null, { converted: !!result.migratedFrom });
+    adoptProofs(proofs);
+    rememberChecked(result);
     if (!result.migratedFrom && !(result.overBudgetBytes > 0)) { fileInfo = { kind: 'opened', at: new Date() }; renderFileState(); }
     const counts = `${doc.findings.length} findings, ${evidenceCount()} screenshots`;
     // Screenshots that still carried hidden data were cleaned on open; saving keeps the clean copy.
@@ -3048,14 +3107,26 @@ Third-party software notices
     if (draftDecoded.gen !== generation || draftDecoded.map.size > 2 * LIMITS.images) draftDecoded = { gen: generation, map: new Map() };
     return draftDecoded.map;
   };
+  // Screenshots checked completely in this session (opened, restored or by a draft check), for
+  // this project only (see openProjectData). The draft check does not check them again while
+  // their data and attributes are unchanged; only the project's own screenshots are kept.
+  let proofState = { gen: -1, map: new Map() };
+  const sessionProofs = () => {
+    if (proofState.gen !== generation) proofState = { gen: generation, map: new Map() };
+    return proofState.map;
+  };
+  const adoptProofs = (map) => { proofState = { gen: generation, map }; };
+  const newDraftRev = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
   // Independent review F3: on a file:// page every local HTML file shares this storage.
   const DRAFT_DISCLOSURE = 'Keep an unencrypted recovery draft in this browser profile. It includes screenshots. Because the app runs from a file on your disk, any other web page or HTML file you open from this computer\'s disk in this browser can read or replace the draft, and anyone with access to this profile may be able to read it. Leave it off if you open HTML files from targets or tools in this browser. Save a project file for your own backup. Turning this off deletes the draft and reports whether that worked.';
-  const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false };
+  // checking: the draft found at startup is still being read and checked; nothing is written
+  // until that ends, so no new draft can replace it unseen.
+  const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false, checking: true };
   const draftNote = h('span', { class: 'draft-note', 'data-testid': 'draft-note', hidden: true });
   const draftBanner = h('div', { class: 'recovery', role: 'region', 'aria-label': 'Recovery draft', hidden: true, 'data-testid': 'draft-banner' });
   dirtyBadge.after(draftNote);
   recoveryBanner.after(draftBanner);
-  const draftWanted = () => draftState.enabled && !draftState.sessionOff && !draftState.pending;
+  const draftWanted = () => draftState.enabled && !draftState.sessionOff && !draftState.pending && !draftState.checking;
   // Says only what this tab knows: never claims the browser holds nothing.
   const storageClaim = () => (draftState.enabled ? 'recovery drafts are on, so a draft is also kept in this browser'
     : draftState.maybeStored ? 'a recovery draft may still be stored in this browser (its deletion could not be confirmed)'
@@ -3086,14 +3157,24 @@ Third-party software notices
     try {
       // Inside the try: a large project can fail to serialize (memory); that pauses drafts with
       // the same message as a failed write, and the last kept draft stays.
-      const json = serialize(new Date().toISOString());
-      const bytes = new TextEncoder().encode(json).length;
-      // A draft is stored only if it would open in this app as it is.
-      // Screenshots this session already decoded are not decoded again (decodedForDrafts).
-      const check = await openProjectFile(json, bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts() });
+      const savedAt = new Date().toISOString();
+      const file = snapshotFile(savedAt);
+      if (file.bytes > LIMITS.fileBytes) return;
+      // A draft is stored only if it would open in this app as it is. The check reads the
+      // snapshot taken above, not the live project. Screenshots already checked completely in
+      // this session, with the same data and attributes, are not checked again; this session's
+      // decoded screenshots are not decoded again (decodedForDrafts).
+      const proofs = sessionProofs();
+      const check = await openProjectData(partsToProject(file), file.bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts(), proofs, useProofs: true });
       if (!check.ok || check.overBudgetBytes > 0 || check.migratedFrom !== null) return;
-      if (gen !== generation || rev !== revision || epoch !== draftState.epoch || !draftWanted()) return; // newer state follows
-      const result = await writeDraft(epoch, { savedAt: new Date().toISOString(), appVersion, bytes, json });
+      const current = () => gen === generation && rev === revision && epoch === draftState.epoch && draftWanted();
+      if (!current()) return; // newer state follows
+      const keep = new Set(check.project.images.map((im) => im.id));
+      for (const key of proofs.keys()) if (!keep.has(key)) proofs.delete(key);
+      const blob = await partsToBlob(file.parts, { isCurrent: current });
+      if (!blob) return;
+      if (blob.size !== file.bytes) throw new Error('the draft could not be prepared');
+      const result = await writeDraft(epoch, { format: 2, rev: newDraftRev(), savedAt, appVersion, bytes: file.bytes, blob });
       if (result === 'stale') { // turned off or re-enabled in another tab
         draftState.enabled = false;
         say('Recovery drafts were turned off in another tab. Nothing more is kept in this browser.');
@@ -3156,12 +3237,17 @@ Third-party software notices
           : h('span', { class: 'quiet' }, 'Recovery drafts are not available: this browser offers no storage for this page.')));
   }
 
-  function offerDraft(draft, findings) {
+  /** Offers a stored draft; with `problem`, one that cannot be opened, which is kept as it is
+   * (only Discard). Either way new drafts wait until the user chooses. */
+  function offerDraft(draft, findings, problem = null) {
     draftState.pending = draft;
-    const when = new Date(draft.savedAt).toLocaleString();
-    const fits = findings <= maxFindings;
+    const date = new Date(draft.savedAt);
+    const when = Number.isNaN(date.getTime()) ? 'an earlier session' : date.toLocaleString();
+    const fits = !problem && findings <= maxFindings;
     draftBanner.replaceChildren(
-      h('p', {}, h('strong', {}, 'Recovery draft found. '), fits
+      h('p', {}, h('strong', {}, 'Recovery draft found. '), problem
+        ? `A draft from ${when} is kept in this browser, but it cannot be opened (${problem}). It stays stored unchanged; discard it to remove it. New drafts are paused until you do.`
+        : fits
         ? `A draft from ${when} is kept in this browser. Restore it, or discard it. New drafts are paused until you choose.`
         : `A draft from ${when} with ${findings} findings is kept in this browser, but this ${edition ? `${edition.toLowerCase()} ` : ''}build opens projects with up to ${maxFindings}. It stays stored unchanged; open it in the full version, or discard it. New drafts are paused until you choose.`),
       ...(fits ? [h('button', { type: 'button', 'data-testid': 'draft-restore', onclick: restoreDraft }, 'Restore draft')] : []),
@@ -3183,7 +3269,13 @@ Third-party software notices
     const rev = revision;
     const epoch = draftState.epoch;
     say('Checking the recovery draft…');
-    const result = await openProjectFile(draft.json, new TextEncoder().encode(draft.json).length, { appVersion, decodeImage: decodeImageInBrowser });
+    let stored;
+    try { stored = await draftText(draft, LIMITS.fileBytes); } catch (err) {
+      say(`The recovery draft cannot be opened (${err?.message || 'storage error'}). It is still stored; discard it to remove it.`, 'error');
+      return;
+    }
+    const proofs = new Map();
+    const result = await openProjectFile(stored.text, stored.bytes, { appVersion, decodeImage: decodeImageInBrowser, proofs });
     if (!result.ok || result.overBudgetBytes > 0) {
       say(`The recovery draft cannot be opened (${(result.errors || [`over the ${CAP} limit`]).slice(0, 2).join(' · ')}). It is still stored; discard it to remove it.`, 'error');
       return;
@@ -3199,7 +3291,7 @@ Third-party software notices
     // Turned off, discarded or replaced (here or in another tab) while checking.
     let now;
     try { now = await readDraftState(); } catch { now = null; }
-    if (draftState.pending !== draft || !draftState.enabled || epoch !== draftState.epoch || !now?.enabled || now.epoch !== epoch || !now.draft || now.draft.json !== draft.json) {
+    if (draftState.pending !== draft || !draftState.enabled || epoch !== draftState.epoch || !now?.enabled || now.epoch !== epoch || !sameDraft(now.draft, draft)) {
       if (draftState.pending === draft) { draftState.pending = null; draftBanner.hidden = true; showDraftNote(); }
       say('The draft was not restored: recovery drafts were changed or turned off meanwhile.', 'error');
       return;
@@ -3209,6 +3301,8 @@ Third-party software notices
       return;
     }
     replaceProject(result.project);
+    adoptProofs(proofs);
+    rememberChecked(result);
     draftState.pending = null;
     draftBanner.hidden = true;
     markDirty(); // a draft is not a saved file
@@ -3235,21 +3329,37 @@ Third-party software notices
   readDraftState().then(async (state) => {
     draftState.enabled = state.enabled;
     draftState.epoch = state.epoch;
-    if (state.enabled && state.draft && !dirty && revision === 0) {
+    try {
+      if (!state.enabled || !state.draft) return;
       const d = state.draft;
-      const gen = generation;
-      const check = await openProjectFile(d.json, new TextEncoder().encode(d.json).length, { appVersion, decodeImage: decodeImageInBrowser });
-      // Offer only if nothing changed meanwhile, here or in another tab: still on, same
-      // epoch and the same draft in the store, same clean project.
-      let now = null;
-      if (check.ok && check.overBudgetBytes === 0) { try { now = await readDraftState(); } catch { now = null; } }
-      if (now && revision === 0 && gen === generation && !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
-          now.enabled && now.epoch === state.epoch && now.draft?.json === d.json) offerDraft(d, check.project.findings.length);
-      else if (now && !now.enabled) draftState.enabled = false;
+      let check = { ok: false };
+      let problem = null;
+      try {
+        const stored = await draftText(d, LIMITS.fileBytes);
+        check = await openProjectFile(stored.text, stored.bytes, { appVersion, decodeImage: decodeImageInBrowser });
+        if (!check.ok) problem = (check.errors || []).slice(0, 2).join(' · ') || 'it is not a valid project';
+        else if (check.overBudgetBytes > 0) problem = `it is over the ${CAP} limit`;
+      } catch (err) { problem = err?.message || 'it could not be read'; }
+      // Offer it if it is still the stored draft (here or in another tab: still on, same epoch,
+      // same record), also when the project was edited meanwhile: Restore asks before
+      // replacing work. One that cannot be opened is offered with Discard only.
+      let now;
+      try { now = await readDraftState(); } catch {
+        draftState.sessionOff = true; // cannot confirm what is stored: write nothing over it
+        say('Recovery drafts are paused in this tab: the stored draft could not be checked. Save the project to a file.', 'error');
+        return;
+      }
+      const same = !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
+        now.enabled && now.epoch === state.epoch && sameDraft(now.draft, d);
+      if (same) offerDraft(d, problem ? 0 : check.project.findings.length, problem);
+      else if (!now.enabled) draftState.enabled = false;
+    } finally {
+      draftState.checking = false;
+      showDraftNote();
+      if (view === 'export') renderMain();
+      if (dirty && draftWanted()) scheduleDraft();
     }
-    showDraftNote();
-    if (view === 'export') renderMain();
-  }, () => { draftState.supported = false; if (view === 'export') renderMain(); });
+  }, () => { draftState.supported = false; draftState.checking = false; if (view === 'export') renderMain(); });
 
   render();
   // Test hook: read-only snapshot of state, used by the browser tests.

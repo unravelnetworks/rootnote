@@ -32,7 +32,8 @@ const FAKE = `(() => {
         write: async (data) => {
           if (w.__picker.gate) await w.__picker.gate;
           if (w.__picker.writeMode === 'fail') throw new DOMException('disk full', 'QuotaExceededError');
-          parts.push(new Uint8Array(data));
+          // Like the real writable: bytes or a Blob.
+          parts.push(data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : new Uint8Array(data));
         },
         close: async () => {
           const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));

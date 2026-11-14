@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createEmptyProject, defaultFormats, findingId, imageId, savedSize, LIMITS } from '../src/app/project.js';
@@ -118,6 +118,32 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       assert.ok(await b.waitFor(`${snap}.findings[0].title === 'Finding 1 at the limit'`, 10000));
     });
 
+    await t.test('an edit made while the file is being prepared stays unsaved; the file is the project at the click', async () => {
+      const dl = join(out, 'during');
+      mkdirSync(dl, { recursive: true });
+      await b.allowDownloads(dl);
+      const expected = (await b.evaluate(STATE)).digest;
+      // Hold the zero-delay timers the file is built with, so an edit lands mid-build.
+      await b.evaluate("(() => { const st = window.setTimeout; window.__held = []; window.setTimeout = (f, d, ...a) => (d ? st(f, d, ...a) : (window.__held.push(() => f(...a)), 0)); window.__release = () => { window.setTimeout = st; window.__held.splice(0).forEach((f) => st(f, 0)); }; })()");
+      await b.evaluate("document.querySelector('[data-testid=save]').click()");
+      assert.ok(await b.waitFor('window.__held.length > 0', 30000), 'the build did not pause');
+      // A second Save meanwhile is refused; it does not queue another file.
+      await b.evaluate("document.querySelector('[data-testid=save]').click()");
+      assert.ok(await b.waitFor("/still being saved/.test(document.querySelector('.status').textContent)", 5000), await b.evaluate("document.querySelector('.status').textContent"));
+      await b.evaluate("(() => { const t = document.querySelector('[data-testid=finding-title]'); t.value = 'Edited during save'; t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      await b.evaluate('window.__release()');
+      const saved = await waitForFile(dl, /\.rootnote\.json$/, 300000);
+      await new Promise((r) => setTimeout(r, 2000));
+      assert.equal(readdirSync(dl).filter((n) => n.endsWith('.rootnote.json')).length, 1, 'one file');
+      assert.ok(await b.waitFor("/changed the project while it was being prepared/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
+      assert.equal(await b.evaluate('window.__fieldnote.isDirty()'), true, 'still unsaved');
+      const f = JSON.parse(readFileSync(saved, 'utf8'));
+      assert.equal(createHash('sha256').update(JSON.stringify({ ...f, savedAt: '', appVersion: '' })).digest('hex'), expected, 'the file is the project at the click');
+      assert.equal(f.findings[0].title, 'Finding 1 at the limit');
+      await b.evaluate("(() => { const t = document.querySelector('[data-testid=finding-title]'); t.value = 'Finding 1 at the limit'; t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      assert.ok(await b.waitFor(`${snap}.findings[0].title === 'Finding 1 at the limit'`, 10000));
+    });
+
     await t.test('it saves within the limit and reopens with the same content in a fresh page', async () => {
       const dl = join(out, 'saved');
       mkdirSync(dl, { recursive: true });
@@ -134,6 +160,24 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       const again = await b.evaluate(STATE);
       assert.equal(again.digest, expected, 'the reopened project is the saved one');
       assert.equal(await b.evaluate(`${snap}.findings[0].title`), 'Finding 1 at the limit');
+    });
+    await t.test('opening another project while the file is being prepared: the file is the old project, the new one is not marked saved', async () => {
+      const dl = join(out, 'other');
+      mkdirSync(dl, { recursive: true });
+      await b.allowDownloads(dl);
+      const expected = (await b.evaluate(STATE)).digest;
+      await b.evaluate("(() => { const st = window.setTimeout; window.__held = []; window.setTimeout = (f, d, ...a) => (d ? st(f, d, ...a) : (window.__held.push(() => f(...a)), 0)); window.__release = () => { window.setTimeout = st; window.__held.splice(0).forEach((f) => st(f, 0)); }; })()");
+      await b.evaluate("document.querySelector('[data-testid=save]').click()");
+      assert.ok(await b.waitFor('window.__held.length > 0', 30000), 'the build did not pause');
+      await b.setFile('[data-testid=open-input]', here('./fixtures/small.json'));
+      if (await b.waitFor("!!document.querySelector('dialog.confirm')", 3000)) await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings.length === 3`, 60000), 'the other project opened');
+      await b.evaluate('window.__release()');
+      const saved = await waitForFile(dl, /\.rootnote\.json$/, 300000);
+      assert.ok(await b.waitFor("/a different project is open now/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
+      const f = JSON.parse(readFileSync(saved, 'utf8'));
+      assert.equal(createHash('sha256').update(JSON.stringify({ ...f, savedAt: '', appVersion: '' })).digest('hex'), expected, 'the file is the project at the click');
+      assert.equal(await b.evaluate(`${snap}.savedAt === ${JSON.stringify(f.savedAt)}`), false, 'the opened project is not marked as that save');
     });
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {
