@@ -280,7 +280,8 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
 
     await t.test('a file read failure on open is reported and changes nothing', async () => {
       await fresh(b);
-      await b.evaluate("Blob.prototype.arrayBuffer = () => Promise.reject(new Error('read failed'))");
+      // Opening reads text (Blob.text) and, for a strict UTF-8 recheck, bytes: both fail here.
+      await b.evaluate("Blob.prototype.arrayBuffer = () => Promise.reject(new Error('read failed')); Blob.prototype.text = () => Promise.reject(new Error('read failed'))");
       const mark = b.errors.length;
       await b.setFile('[data-testid=open-input]', fixture);
       assert.ok(await b.waitFor("document.querySelector('.status').textContent.includes('could not be read')"));
