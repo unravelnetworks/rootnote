@@ -7,8 +7,9 @@ import fs from 'node:fs/promises';
 import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import {
-  createEmptyProjectV1, createEmptyProjectV2 as createEmptyProject, migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, validateProjectFile, openProjectFile,
+  createEmptyProjectV1, createEmptyProjectV2 as createEmptyProject, migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, migrateV7toV8, validateProjectFile, openProjectFile,
   resolveFindingPrefix, savedSize, findingId, imageId, LIMITS, LABEL_KEYS,
+  LIMITS_V7,
 } from '../src/app/project.js';
 
 const schema = JSON.parse(await fs.readFile(new URL('../schema/project.v2.schema.json', import.meta.url), 'utf8'));
@@ -137,7 +138,7 @@ rejects('prefix over 40', (p) => { p.project.findingPrefix = 'P'.repeat(41); }, 
 rejects('bad scoring mode', (p) => { p.project.scoring.mode = 'dread'; }, /must be one of/);
 rejects('missing backToSummaryLinks', (p) => { delete p.project.backToSummaryLinks; }, /backToSummaryLinks: missing/);
 rejects('control character in a label', (p) => { p.project.labels.page = 'Pa\u0001ge'; }, /cannot be written to Word/);
-rejects('newer schema 8', (p) => { p.schemaVersion = 8; }, /newer version/);
+rejects('newer schema 9', (p) => { p.schemaVersion = 9; }, /newer version/);
 
 test('v1 still rejects the v2-only auto tall mode', async () => {
   const p = createEmptyProjectV1();
@@ -175,7 +176,7 @@ for (const name of ['small', 'bounds']) {
     assert.equal(r.migratedFrom, 1);
     assert.equal(r.overBudgetBytes, 0);
     const v2 = r.project;
-    assert.equal(v2.schemaVersion, 7); // v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7; the v1 values are checked below
+    assert.equal(v2.schemaVersion, 8); // v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8; the v1 values are checked below
     assert.equal(v2.appVersion, '0.2.0');
     assert.equal(v2.createdAt, v1.createdAt);
     assert.equal(v2.savedAt, v1.savedAt);
@@ -231,7 +232,7 @@ test('a v2 file opens converted through v3, v4, v5 and v6 to v7, with nothing el
   const r = await openText(raw);
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 2);
-  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(JSON.parse(raw), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }));
+  assert.deepEqual(r.project, migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(migrateV2toV3(JSON.parse(raw), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' }), { appVersion: '0.2.0' })));
 });
 
 test('an invalid v1 file is refused before migration', async () => {
@@ -242,9 +243,9 @@ test('an invalid v1 file is refused before migration', async () => {
   assert.match(r.errors.join(' '), /F-001/);
 });
 
-test('near-cap v1: opens in recovery with the measured overage; over-cap v1 and v2 refused', async () => {
-  // Nine ~2 MB images, then text padding so the v1 file sits just under 25 MiB and the
-  // fixed v2 settings push the converted project over it.
+test('near-cap v1: converts within the v8 limit (no recovery); a v1 file over its own 25 MiB is refused', async () => {
+  // Nine ~2 MB images, then text padding so the v1 file sits just under its 25 MiB bound. The
+  // conversion adds settings, which used to push it over 25 MiB; under the v8 limit it fits.
   const p = createEmptyProjectV1(new Date('2026-11-01T00:00:00Z'));
   const big = png(1000, 690);
   assert.ok(big.length <= LIMITS.imageBytes);
@@ -265,25 +266,25 @@ test('near-cap v1: opens in recovery with the measured overage; over-cap v1 and 
     }
     assert.equal(need, 0, 'padding capacity');
   };
-  pad(LIMITS.fileBytes - Math.floor(growth / 2));
+  pad(LIMITS_V7.fileBytes - Math.floor(growth / 2));
   const raw = JSON.stringify(p);
-  assert.ok(Buffer.byteLength(raw) <= LIMITS.fileBytes);
+  assert.ok(Buffer.byteLength(raw) <= LIMITS_V7.fileBytes);
   const r = await openText(raw);
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 1);
-  assert.ok(r.overBudgetBytes > 0 && r.overBudgetBytes <= growth, `over ${r.overBudgetBytes}`);
-  assert.equal(r.overBudgetBytes, savedSize(r.project) - LIMITS.fileBytes);
-  // The same converted project saved as a v3 file is refused (no recovery for native v3).
-  const v2raw = JSON.stringify(r.project);
-  const v2 = await openText(v2raw);
-  assert.equal(v2.ok, false);
-  assert.match(v2.errors[0], /limit is 26214400/);
-  // A v1 file over the limit is refused before parsing.
-  const over = await openProjectFile(raw, LIMITS.fileBytes + 1);
+  assert.equal(r.overBudgetBytes, 0);
+  assert.ok(savedSize(r.project) > LIMITS_V7.fileBytes, 'the converted project is over the old bound');
+  // Saved as a v8 file, the converted project opens natively.
+  const native = await openText(JSON.stringify(r.project));
+  assert.equal(native.ok, true, JSON.stringify(native.errors));
+  assert.equal(native.migratedFrom, null);
+  // A v1 file over its own bound is refused, though it would fit the v8 limit.
+  const over = await openProjectFile(raw, LIMITS_V7.fileBytes + 1);
   assert.equal(over.ok, false);
+  assert.match(over.errors[0], /limit is 26214400 \(25 MB\)/);
 });
 
-test('v2 whose saved form exceeds 25 MiB opens in recovery after conversion (was refused before v3)', async () => {
+test('v2 near its 25 MiB bound converts within the v8 limit (no recovery)', async () => {
   const p = createEmptyProject(new Date('2026-11-01T00:00:00Z'));
   p.savedAt = '2026-11-01T00:00:00Z'; // valid, 4 characters shorter than the app writes
   const big = png(1000, 690);
@@ -293,24 +294,24 @@ test('v2 whose saved form exceeds 25 MiB opens in recovery after conversion (was
   }));
   p.project.nextFindingNumber = 21;
   p.project.nextImageNumber = 10;
-  let need = LIMITS.fileBytes - 1 - Buffer.byteLength(JSON.stringify(p));
+  let need = LIMITS_V7.fileBytes - 1 - Buffer.byteLength(JSON.stringify(p));
   for (const f of p.findings) for (const k of ['description', 'impact', 'recommendation', 'details']) {
     const add = Math.min(need, LIMITS.text - f[k].length);
     if (add > 0) { f[k] += 'a'.repeat(add); need -= add; }
   }
   assert.equal(need, 0, 'padding capacity');
   const raw = JSON.stringify(p);
-  assert.equal(Buffer.byteLength(raw), LIMITS.fileBytes - 1);
-  assert.ok(savedSize(p) > LIMITS.fileBytes);
+  assert.equal(Buffer.byteLength(raw), LIMITS_V7.fileBytes - 1);
+  assert.ok(savedSize(p) > LIMITS_V7.fileBytes);
   // The file is a valid v2 file as such...
   assert.equal((await validateProjectFile(raw, Buffer.byteLength(raw))).ok, true);
-  // ...and since v3 a v2 file is converted, so it opens in the recovery state with the
-  // measured overage instead of being refused (v3 rule 7). Native v3: project-v3.test.mjs.
+  // ...and it converts on open. Its saved form is over the old 25 MiB bound but well within
+  // the v8 limit, so it opens normally (no recovery state).
   const r = await openProjectFile(raw, Buffer.byteLength(raw));
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.equal(r.migratedFrom, 2);
-  assert.equal(r.overBudgetBytes, savedSize(r.project) - LIMITS.fileBytes);
-  assert.ok(r.overBudgetBytes > 0);
+  assert.equal(r.overBudgetBytes, 0);
+  assert.ok(savedSize(r.project) > LIMITS_V7.fileBytes);
 });
 
 test('callers cannot skip image checks through options', async () => {

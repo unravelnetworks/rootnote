@@ -4,3 +4,4 @@ tests/out/
 *.log
 release/
 site/out/
+dist-test/

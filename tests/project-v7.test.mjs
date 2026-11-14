@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import {
-  createEmptyProject, createEmptyProjectV6, migrateV6toV7, openProjectFile, validateProjectFile, validateProjectFileV7, validateProjectFileV6,
+  createEmptyProject, createEmptyProjectV6, createEmptyProjectV7, migrateV6toV7, migrateV7toV8, openProjectFile, validateProjectFile, validateProjectFileV7, validateProjectFileV6,
   projectFromSettings, defaultFormats, SCHEMA_VERSION,
 } from '../src/app/project.js';
 import { createReportPlan } from '../src/export-docx/plan.js';
@@ -40,17 +40,17 @@ test('the frozen v7 schema adds cvssVersion and the CVSS 4.0 Base pattern only',
   assert.match(schema.$comment, /v6 to v7: project\.scoring\.cvssVersion "3\.1"/);
 });
 
-test('a new project is v7: the report uses CVSS 3.1 until changed; the label keeps its default', async () => {
-  const d = createEmptyProject(NOW);
-  assert.equal(SCHEMA_VERSION, 7);
+test('a v7 project: the report uses CVSS 3.1 until changed; the label keeps its default; it opens as v8 unchanged', async () => {
+  const d = createEmptyProjectV7(NOW);
+  assert.equal(SCHEMA_VERSION, 8);
   assert.equal(d.schemaVersion, 7);
   assert.equal(d.project.scoring.cvssVersion, '3.1');
   assert.equal(d.project.labels.cvss, 'CVSS 3.1 Base');
   assert.ok((await check(d)).ok);
   assert.ok((await validateProjectFileV7(json(d), Buffer.byteLength(json(d)))).ok);
   const r = await openProjectFile(json(d), Buffer.byteLength(json(d)));
-  assert.equal(r.migratedFrom, null);
-  assert.deepEqual(r.project, d);
+  assert.equal(r.migratedFrom, 7);
+  assert.deepEqual(r.project, migrateV7toV8(d));
 });
 
 test('v6 to v7 adds cvssVersion 3.1 and changes nothing else; labels and vectors are kept', async () => {
@@ -68,7 +68,7 @@ test('v6 to v7 adds cvssVersion 3.1 and changes nothing else; labels and vectors
   const r = await openProjectFile(json(v6), Buffer.byteLength(json(v6)));
   assert.equal(r.ok, true, r.errors?.join('; '));
   assert.equal(r.migratedFrom, 6);
-  assert.deepEqual(r.project, v7);
+  assert.deepEqual(r.project, migrateV7toV8(v7));
 });
 
 test('older versions stay strictly CVSS 3.1; v7 takes 3.1 and 4.0 side by side', async () => {
@@ -81,14 +81,14 @@ test('older versions stay strictly CVSS 3.1; v7 takes 3.1 and 4.0 side by side',
   assert.ok((await validateProjectFileV6(json(mixed()), 10)).errors.includes('Not a schema v6 project file.'));
 });
 
-test('the validator refuses a bad cvssVersion, non-canonical or extended 4.0 vectors, and v8', async () => {
+test('the validator refuses a bad cvssVersion, non-canonical or extended 4.0 vectors, and v9', async () => {
   const bad = async (edit, re) => { const d = mixed(); edit(d); assert.match(((await check(d)).errors ?? []).join(' '), re); };
   await bad((d) => { d.project.scoring.cvssVersion = '4'; }, /cvssVersion: must be 3\.1 or 4\.0/);
   await bad((d) => { delete d.project.scoring.cvssVersion; }, /cvssVersion/);
   await bad((d) => { d.findings[1].cvss = 'CVSS:4.0/AC:L/AV:N/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'; }, /canonical CVSS 3\.1 or 4\.0/);
   await bad((d) => { d.findings[1].cvss = V40 + '/E:A'; }, /canonical CVSS 3\.1 or 4\.0/);
   await bad((d) => { d.findings[1].cvss = 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:S/SA:N'; }, /canonical CVSS 3\.1 or 4\.0/);
-  assert.equal((await openProjectFile(json({ ...mixed(), schemaVersion: 8 }), 10)).newer, true);
+  assert.equal((await openProjectFile(json({ ...mixed(), schemaVersion: 9 }), 10)).newer, true);
 });
 
 test('the label names the report version; only a score in the other version names its own', () => {

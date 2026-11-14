@@ -7,7 +7,7 @@ The step-by-step guide is in `guide.html` in this folder (it works offline) and 
 ## Quick start
 
 1. Open `rootnote.html` in current **Google Chrome**, **Microsoft Edge** or **Firefox** (double-click it, or drag it into a browser window). See *Browsers* below for what differs between them.
-2. Choose **New report**, or **Open a project** to continue a saved one. To see a finished report first, choose **Open the sample**: it is built into Rootnote and uses a fictional client and synthetic evidence. The same project is included as `sample-project.rootnote.json`, and `sample-report.docx` is the Word file it produces.
+2. Choose **New report**, or **Open a project** to continue a saved one. To see a finished report first, choose **Open the sample**: it is built into Rootnote and uses a fictional client and synthetic evidence. The same project is included as `sample-project.rootnote.json`, and `sample-report.docx` is the Word file it produces. `sample-project-cvss40.rootnote.json` and `sample-report-cvss40.docx` are the same report scored with CVSS 4.0 instead of 3.1.
 3. Fill in **Details & cover**. In **Sections & scoring**, choose the report sections, their order and names, add up to 10 of your own sections, and pick the scoring: severity, risk or CVSS (3.1 or 4.0 Base), alone or with CVSS.
 4. Click **New finding** for each finding. Set the rating (or use the CVSS calculator), affected assets, status, vulnerability type and CWE, then write the sections.
 5. In **Additional details**, write the steps and put screenshots between the text where they belong:
@@ -44,7 +44,7 @@ choose **Or browse your engagement folders** on the start page (or **Engagements
 - Chrome and Edge ask once per session whether the page may edit files in that folder. The app shows what it is doing while your browser waits for the answer.
 - The folder is not remembered: choose it again each time you open the app. The Engagements view itself stores nothing in the browser (recovery drafts, if you turn them on, are separate; see *Privacy*).
 - Firefox and other browsers without folder access can read the folders, but Save and exports go to your downloads; the screen says so.
-- The app reads at most 50 project files or 200 MB at a time (a button reads the next batch) and never reads project files over 25 MB.
+- The app reads at most 50 project files or 200 MB at a time (a button reads the next batch) and never reads project files over 256 MB. A project larger than 200 MB is read on its own.
 
 ## Screenshot editing
 
@@ -84,20 +84,22 @@ These limits reflect the report sizes we have tested, not a paid restriction. Te
 
 | Item | Limit |
 |---|---|
-| Findings per project | 20 |
-| Screenshots per project | 30 |
+| Findings per project | 150 |
+| Screenshots per project | 400 |
 | Screenshot format | PNG or JPEG |
 | Each screenshot | 2 MiB (2,097,152 bytes) and 16 megapixels (max 16,000 px per side) |
-| Project file | 25 MiB (26,214,400 bytes). Changes that would exceed it are refused, so the project always stays saveable. |
+| Project file | 256 MiB (268,435,456 bytes). A change that would take the project over it is refused, so the project always stays saveable. |
 | Text | 300 characters for single-line fields, 20,000 for text areas |
 | Additional details | 100 blocks per finding; their text together up to 20,000 characters |
 | Your own report sections | 10 |
 | References per finding | 20 |
 | Finding library file | 500 entries, 5 MB, text only |
 
-The app's messages round these limits to "2 MB" and "25 MB".
+The app's messages show these limits as "2 MB" and "256 MB".
 
-**Older projects** (saved by earlier versions) are converted when opened. If a converted project ends up over 25 MB, it still opens, with a notice: you can remove screenshots to bring it under the limit. Edits that do not grow the file are allowed. Save and report export stay unavailable until it fits; Download original preserves the original imported file. Projects saved by this version that are over the limit are refused.
+Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows in Chrome, Edge and Firefox, on a machine with 64 GB of RAM. Reports that large need a lot of memory, and Firefox needs the most. On a machine with less RAM, work in Chrome or Edge and keep large reports smaller.
+
+**Older projects** (saved by earlier versions) are converted when opened and get this version's limits straight away. A file saved by an earlier version is still checked against that version's own limits first. Saving writes project format 8, which Rootnote 0.2.x and earlier cannot open, so keep your original file if you still need the older version. Projects over the limit are refused.
 
 **Tall screenshots** (for example full-page captures) are **split** into page-sized parts that keep one figure number. Split parts are re-encoded as new PNG images, so they are not byte-identical to the original; the image stored in the project is not changed. Switch a screenshot to **shrink to fit** if you prefer one overview image, which keeps the original image data but can make small text hard to read. Screenshots are never cut off silently.
 

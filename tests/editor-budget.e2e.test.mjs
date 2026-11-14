@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { TEST_BUDGET_DIST, TEST_FILE_BYTES } from './harness/test-budget.mjs';
 
 // Synthetic paste: Firefox drops clipboardData from the ClipboardEvent init, so the same
 // DataTransfer is also attached to the event object (identical in Chrome and Edge). Real
@@ -16,9 +17,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const { launch, installed, waitForFile } = require('./harness/driver.cjs');
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const dist = here('../dist/rootnote.html');
+// The test-only budget build (25 MiB project limit): see tests/harness/test-budget.mjs.
+const dist = TEST_BUDGET_DIST;
 const fixture = here('./fixtures/small.json');
-const LIMIT = 26214400;
+const LIMIT = TEST_FILE_BYTES;
 
 function crc32(buf) {
   let crc = 0xffffffff;

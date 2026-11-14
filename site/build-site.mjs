@@ -98,7 +98,7 @@ function unzipOne(zip, suffix) {
   throw new Error(`${suffix} not found in the release zip`);
 }
 
-let zipName = null, zipHash = null, sampleName = null, sampleHash = null;
+let zipName = null, zipHash = null, sampleName = null, sampleHash = null, sample40Name = null, sample40Hash = null;
 if (zipPath) {
   const zip = await readFile(zipPath);
   zipName = basename(zipPath);
@@ -109,7 +109,12 @@ if (zipPath) {
   sampleName = `${basename(zipPath, '.zip')}-sample-report.docx`;
   sampleHash = sha256(sample);
   await writeFile(out + 'download/' + sampleName, sample);
-  await writeFile(out + 'download/SHA256SUMS.txt', `${zipHash}  ${zipName}\n${sampleHash}  ${sampleName}\n${appHash}  rootnote.html (the page at /app/)\n`);
+  // The same sample scored with CVSS 4.0.
+  const sample40 = unzipOne(zip, '/sample-report-cvss40.docx');
+  sample40Name = `${basename(zipPath, '.zip')}-sample-report-cvss40.docx`;
+  sample40Hash = sha256(sample40);
+  await writeFile(out + 'download/' + sample40Name, sample40);
+  await writeFile(out + 'download/SHA256SUMS.txt', `${zipHash}  ${zipName}\n${sampleHash}  ${sampleName}\n${sample40Hash}  ${sample40Name}\n${appHash}  rootnote.html (the page at /app/)\n`);
 } else console.warn('No release zip given: the landing page shows placeholders for the download.');
 
 const dl = zipName
@@ -136,7 +141,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <h1>From screenshots and notes to an editable Word pentest report.</h1>
     <p class="lede">Paste your evidence between the steps, black out what must not leave, and export a clean .docx you finish in Word. No install, no account, no server: your findings stay on your computer.</p>
     <p class="actions"><a class="btn" href="/app/">Open Rootnote online</a> ${dl}</p>
-    <p><a href="https://youtu.be/AHG4aabI8Lw">Watch the short demo on YouTube</a> (an edited walkthrough of the fictional sample).${sampleName ? ` Or <a href="/download/${sampleName}">download the sample Word report</a> (.docx, fictional client) to see the output in Word.` : ''}</p>
+    <p><a href="https://youtu.be/AHG4aabI8Lw">Watch the short demo on YouTube</a> (an edited walkthrough of the fictional sample).${sampleName ? ` Or download the sample Word report (.docx, fictional client) scored with <a href="/download/${sampleName}">CVSS 3.1</a> or <a href="/download/${sample40Name}">CVSS 4.0</a> to see the output in Word.` : ''}</p>
     ${fp}
   </div>
   <figure class="proof">
@@ -168,7 +173,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
     <p><strong>Offline</strong>, unzip the download, check its SHA-256 against this page, and open <code>rootnote.html</code>. It works with the network unplugged.</p>
     <p>Check it yourself: open your browser's developer tools, Network tab, and use the app.</p></div>
   <div><h2>Limits, honestly</h2><ul>
-    <li>Per project: 20 findings, 30 screenshots (2 MiB each), 25 MiB file. These are the sizes we have tested, not a paid restriction; tell us if they get in your way.</li>
+    <li>Per project: up to 150 findings, 400 screenshots (2 MB each) and a 256 MB file, tested on Windows with 64 GB of RAM. Large reports need a lot of memory. These are sizes we have tested, not a paid tier. Everything in Rootnote is free.</li>
     <li>One built-in report design; your own Word template is not supported.</li>
     <li>No scanner imports, collaboration or AI. CVSS 4.0 is Base metrics only.</li>
     <li>Tested on Windows in current Chrome, Edge and Firefox. Basic use in Safari on macOS and exploring on an iPhone with Safari have been checked by hand; see the <a href="/guide/reference/#browsers">browser table</a>.</li></ul>
@@ -324,7 +329,7 @@ await writeFile(out + '_headers', [
   block('/app/*', [`Content-Security-Policy: ${appCsp}; frame-ancestors 'none'`, 'Cache-Control: no-cache']),
   block('/download/*', ['Cache-Control: no-cache']),
   // The host sends no type for .docx; with nosniff, say what it is so Word is offered to open it.
-  ...(sampleName ? [block(`/download/${sampleName}`, ['Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document'])] : []),
+  ...(sampleName ? [sampleName, sample40Name].map((n) => block(`/download/${n}`, ['Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document'])) : []),
 ].join('\n'));
 
 await writeFile(out + 'site-manifest.json', JSON.stringify({ version: APP_VERSION, app: { path: '/app/', sha256: appHash }, zip: zipName && { path: `/download/${zipName}`, sha256: zipHash } }, null, 2) + '\n');

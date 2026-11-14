@@ -82,7 +82,7 @@ const rejects = async (name, mutate, pattern) => {
   });
 };
 
-rejects('newer schema', (p) => { p.schemaVersion = 8; }, /newer version/);
+rejects('newer schema', (p) => { p.schemaVersion = 9; }, /newer version/);
 rejects('wrong format marker', (p) => { p.format = 'x'; }, /Not a project file/);
 rejects('unknown field', (p) => { p.findings[0].html = '<b>'; }, /unknown field/);
 rejects('id 000', (p) => { p.findings[0].id = 'F-000'; }, /F-001/);
@@ -113,7 +113,7 @@ rejects('more than 30 evidence references', (p) => {
 test('rejects oversized file before parsing', async () => {
   const r = await validateProjectFile('{', LIMITS.fileBytes + 1);
   assert.equal(r.ok, false);
-  assert.match(r.errors[0], /25 MB/);
+  assert.match(r.errors[0], /256 MB/);
 });
 
 test('rejects invalid JSON', async () => {

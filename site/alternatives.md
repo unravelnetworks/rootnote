@@ -51,7 +51,6 @@ Base means the CVSS Base metric group only (CVSS-B). We have not checked whether
 - You need CVSS 4.0 beyond the Base metrics. Rootnote scores CVSS 4.0 Base only. PwnDoc, PeTeReport and SysReptor document CVSS 4.0; we have not checked how far beyond Base each one goes.
 - You must deliver in your own Word template. PwnDoc, Ghostwriter and AttackForge ReportGen fill templates you control. Rootnote has one built-in design with your sections, logos and colours.
 - You want to manage clients and infrastructure, not just write the report. Look at Ghostwriter.
-- Your reports have more than 20 findings or 30 screenshots. Rootnote enforces those tested limits.
 
 ## What Rootnote is
 
@@ -61,7 +60,7 @@ Base means the CVSS Base metric group only (CVSS-B). We have not checked whether
 - Works offline once downloaded.
 - Exports an editable Word report with styles, numbered figures and a linked findings summary, plus the whole report as Markdown and the findings as CSV.
 - CVSS 3.1 or 4.0 Base scores, one version per report, plus CWE, affected assets and references for each finding.
-- Limits: 20 findings, 30 screenshots and a 25 MiB project file. These are the sizes we have tested.
+- Limits: Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows with 64 GB of RAM. Large reports need a lot of memory.
 - Tested on Windows in Chrome, Edge and Firefox. Basic use in Safari on macOS has been checked by hand.
 - No independent security audit yet. The app runs no AI models.
 

@@ -4,7 +4,11 @@
 // folder is chosen again in each session (a deliberate privacy choice). Chrome and Edge give
 // a folder the app may write into; other browsers read a snapshot through a folder input.
 
-export const ENGAGEMENT_LIMITS = { projectBytes: 25 * 1024 * 1024, batchFiles: 50, batchBytes: 200 * 1024 * 1024, name: 100 };
+import { LIMITS } from '../app/project.js';
+
+// A project file larger than the project limit is never read. A batch reads at most batchFiles
+// files and batchBytes bytes, except that one file larger than batchBytes is read on its own.
+export const ENGAGEMENT_LIMITS = { projectBytes: LIMITS.fileBytes, batchFiles: 50, batchBytes: 200 * 1024 * 1024, name: 100 };
 
 /** What a file in an engagement folder is: 'project', 'report' (Word, PDF or Markdown), 'sheet' (CSV), or null (ignored). */
 export function kindOf(name) {
@@ -106,9 +110,11 @@ export function planBatch(files) {
   for (; i < files.length; i++) {
     const f = files[i];
     if (f.size > ENGAGEMENT_LIMITS.projectBytes) { skipped.push(f); continue; }
-    if (read.length >= ENGAGEMENT_LIMITS.batchFiles || bytes + f.size > ENGAGEMENT_LIMITS.batchBytes) break;
+    // A file larger than the batch budget is read alone, so every scan makes progress.
+    if (read.length >= ENGAGEMENT_LIMITS.batchFiles || (read.length && bytes + f.size > ENGAGEMENT_LIMITS.batchBytes)) break;
     read.push(f);
     bytes += f.size;
+    if (bytes > ENGAGEMENT_LIMITS.batchBytes) { i++; break; }
   }
   return { read, skipped, rest: files.slice(i) };
 }

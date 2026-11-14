@@ -4,6 +4,7 @@ import { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableC
 import { createReportPlan } from './plan.js';
 import {reportDesign,ratingBadge} from './design.js';
 import { stripImageMetadata } from '../app/image-metadata.js';
+import { base64ToBytes, parseImageDataUrl } from '../app/project.js';
 const BASE=reportDesign('253F78');
 const rule=(color=BASE.line,size=4)=>({style:BorderStyle.SINGLE,color,size});
 const noBorder={style:BorderStyle.NONE,color:'FFFFFF',size:0};
@@ -36,16 +37,25 @@ function paragraphs(value, format = 'plain',keepTogether=false) {
       ...(bullet ? {numbering:{reference:'body-bullets',level:0}} : {}) });
   });
 }
+// Each screenshot is checked and decoded once per export, then reused (the export checks every
+// screenshot up front and draws it later; decoding twice, a character at a time, made large
+// exports take minutes).
+const decodedImages = new WeakMap();
 function imageBytes(image) {
-  const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(image.dataUrl ?? '');
-  if (!match || image.mime !== 'image/' + match[1]) throw new Error('Invalid image format: ' + image.id);
-  const data = Uint8Array.from(atob(match[2]), c => c.charCodeAt(0));
+  if (!decodedImages.has(image)) decodedImages.set(image, decodeImageBytes(image));
+  return decodedImages.get(image);
+}
+function decodeImageBytes(image) {
+  const match = parseImageDataUrl(image.dataUrl ?? '', Math.ceil(2097152 / 3) * 4);
+  if (match?.tooLarge) throw new Error('Invalid image bytes: ' + image.id);
+  if (!match || image.mime !== 'image/' + match.type) throw new Error('Invalid image format: ' + image.id);
+  const data = base64ToBytes(match.base64);
   if (!data.length || data.length !== image.bytes || data.length > 2097152) throw new Error('Invalid image bytes: ' + image.id);
   if (image.mime === 'image/png' ? !(data[0] === 137 && data[1] === 80 && data[2] === 78 && data[3] === 71) : !(data[0] === 255 && data[1] === 216 && data[2] === 255)) throw new Error('Invalid image signature: ' + image.id);
   // Older projects can hold screenshots with metadata; the report never carries it.
   const clean = stripImageMetadata(data, image.mime);
   if (!clean) throw new Error('Screenshot ' + image.id + ' could not be checked for hidden data. Remove it and add it again.');
-  return {data: clean, type: match[1] === 'jpeg' ? 'jpg' : 'png'};
+  return {data: clean, type: match.type === 'jpeg' ? 'jpg' : 'png'};
 }
 function drawing(image, dimensions, name, description) {
   return new ImageRun({...imageBytes(image), transformation: {width:dimensions.width,height:dimensions.height},
@@ -222,5 +232,8 @@ export async function exportDocxV2(project, options = {}) {
     const xml = await zip.file(name).async('string');
     zip.file(name,xml.replace(/(<wp:docPr\b[^>]*\bid=")[0-9]+(")/g,(_,a,b)=>a+(++drawingId)+b));
   }
+  // Screenshots are PNG or JPEG, already compressed: they are stored as they are and only the
+  // XML parts are deflated. Deflating them again gains almost nothing in size.
+  for (const name of Object.keys(zip.files).filter(n=>/^word\/media\/./.test(n)&&!zip.files[n].dir)) zip.file(name,await zip.file(name).async('uint8array'),{compression:'STORE'});
   return zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
 }

@@ -28,7 +28,7 @@ for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`rating
 
     await t.test('a converted v4 file has the section off and empty', async () => {
       const p = await b.evaluate(snap);
-      assert.equal(p.schemaVersion, 7); // converted to the current schema
+      assert.equal(p.schemaVersion, 8); // converted to the current schema
       assert.deepEqual(p.project.ratingMethod, { text: '' });
       assert.equal(p.project.sections.report.find((s) => s.key === 'ratingMethod').enabled, false);
     });

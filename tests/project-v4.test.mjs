@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {
-  createEmptyProject, createEmptyProjectV3, createEmptyProjectV4, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, openProjectFile, validateProjectFile, validateProjectFileV4,
+  createEmptyProject, createEmptyProjectV3, createEmptyProjectV4, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7, migrateV7toV8, openProjectFile, validateProjectFile, validateProjectFileV4,
   REPORT_SECTIONS_V4, FINDING_SECTIONS_V4, FINDING_STATUSES, ENGAGEMENT_STATUSES, findingId,
 } from '../src/app/project.js';
 
@@ -80,9 +80,9 @@ test('a v4 project opens converted through v5 and v6 to v7 with nothing else cha
   const r = await openProjectFile(json(d), Buffer.byteLength(json(d)));
   assert.equal(r.ok, true, r.errors?.join('; '));
   assert.equal(r.migratedFrom, 4);
-  assert.deepEqual(r.project, migrateV6toV7(migrateV5toV6(migrateV4toV5(d))));
-  assert.equal(createEmptyProject().schemaVersion, 7);
-  const later = { ...d, schemaVersion: 8 };
+  assert.deepEqual(r.project, migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(d)))));
+  assert.equal(createEmptyProject().schemaVersion, 8);
+  const later = { ...d, schemaVersion: 9 };
   assert.equal((await openProjectFile(json(later), Buffer.byteLength(json(later)))).newer, true);
   const v3 = createEmptyProjectV3();
   assert.deepEqual((await validateProjectFileV4(json(v3), Buffer.byteLength(json(v3)))).errors, ['Not a schema v4 project file.']);

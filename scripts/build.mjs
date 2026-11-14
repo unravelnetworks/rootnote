@@ -19,11 +19,29 @@ const licence = `${await readFile(new URL('NOTICE', root), 'utf8')}\n---\n\n${aw
 // The sample project is embedded too, so "Open the sample" works online without the download.
 const sampleProject = await readFile(new URL('release-template/sample-project.rootnote.json', root), 'utf8');
 const escapeHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-await mkdir(new URL('dist/', root), { recursive: true });
+// TEST BUDGET BUILD (tests only, never released): TEST_BUDGET_BYTES=<n> builds the same app with
+// a smaller current project size limit into dist-test/, so the budget and recovery tests run
+// on small files. The released dist/ build is never changed by it.
+const testBudget = process.env.TEST_BUDGET_BYTES ? Number(process.env.TEST_BUDGET_BYTES) : null;
+if (testBudget !== null && !(Number.isInteger(testBudget) && testBudget > 0)) throw new Error('TEST_BUDGET_BYTES must be a positive integer');
+const outDir = testBudget ? 'dist-test/' : 'dist/';
+const budgetPlugin = {
+  name: 'test-budget',
+  setup(b) {
+    b.onLoad({ filter: /[\\/]src[\\/]app[\\/]project\.js$/ }, async (args) => {
+      const src = await readFile(args.path, 'utf8');
+      const from = 'fileBytes: 268435456, findings: 150';
+      if (src.split(from).length !== 2) throw new Error('test budget: the v8 limit line must appear exactly once in project.js');
+      return { contents: src.replace(from, `fileBytes: ${testBudget}, findings: 150`), loader: 'js' };
+    });
+  },
+};
+await mkdir(new URL(outDir, root), { recursive: true });
 
 // One build.
-for (const file of ['rootnote.html']) {
+for (const file of [testBudget ? 'rootnote-test-budget.html' : 'rootnote.html']) {
   const result = await build({
+    plugins: testBudget ? [budgetPlugin] : [],
     entryPoints: [fileURLToPath(new URL('src/app/main.js', root))],
     bundle: true,
     format: 'iife',
@@ -70,7 +88,10 @@ for (const file of ['rootnote.html']) {
     .replace('__SAMPLE__', () => escapeHtml(sampleProject))
     .replace('__SCRIPT__', () => script);
 
-  await writeFile(new URL('dist/bundled-packages.json', root), JSON.stringify(packages, null, 2) + '\n');
-  await writeFile(new URL(`dist/${file}`, root), html);
-  console.log(`dist/${file} ${html.length} bytes, sha256 ${createHash('sha256').update(html).digest('hex')}`);
+  if (!testBudget) await writeFile(new URL('dist/bundled-packages.json', root), JSON.stringify(packages, null, 2) + '\n');
+  const out = testBudget
+    ? html.replace('<head>', `<head>\n<!-- TEST BUDGET BUILD: project limit ${testBudget} bytes. Not for use. -->`).replace('<title>', '<title>[TEST BUILD, not for use] ')
+    : html;
+  await writeFile(new URL(`${outDir}${file}`, root), out);
+  console.log(`${outDir}${file} ${out.length} bytes, sha256 ${createHash('sha256').update(out).digest('hex')}`);
 }

@@ -6,8 +6,10 @@
 import { stripImageMetadata } from './image-metadata.js';
 
 export const FORMAT = 'fieldnote-project';
-export const SCHEMA_VERSION = 7;
-export const LIMITS = Object.freeze({
+export const SCHEMA_VERSION = 8;
+// Bounds of schema v1-v7 files (v1 also allows at most 31 images). Frozen: older files are
+// checked against the bounds they were written under.
+export const LIMITS_V7 = Object.freeze({
   fileBytes: 26214400,
   imageBytes: 2097152,
   imagePixels: 16000000,
@@ -23,6 +25,18 @@ export const LIMITS = Object.freeze({
   text: 20000,
   detailBlocks: 100,
 });
+// Schema v8: only the size of a report changes (tested up to 150 findings, 400 screenshots and
+// 256 MB on Windows). Every image is a screenshot or a logo, so 402 images at most.
+export const LIMITS_V8 = Object.freeze({ ...LIMITS_V7, fileBytes: 268435456, findings: 150, evidence: 400, images: 402 });
+/** The limits of the current format: what this version saves and edits. */
+export const LIMITS = LIMITS_V8;
+/** The bounds a file of this schema version is checked against, or null for an unknown version. */
+export function limitsForVersion(v) {
+  return v === 8 ? LIMITS_V8 : Number.isInteger(v) && v >= 1 && v <= 7 ? LIMITS_V7 : null;
+}
+/** A size in the app's unit: binary MB, as the app has always shown them. */
+export const megabytes = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+const fileTooLarge = (rawBytes, limit) => ({ ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${limit} (${megabytes(limit)}).`] });
 export const SEVERITIES = Object.freeze(['Critical', 'High', 'Medium', 'Low', 'Informational']);
 export const SCORING_MODES = Object.freeze(['severity', 'risk', 'cvss', 'severity+cvss', 'risk+cvss']);
 export const REPORT_SECTIONS = Object.freeze(['executiveSummary', 'engagement', 'scope', 'findingsSummary']);
@@ -67,7 +81,35 @@ const BLOCK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const IMAGE_ID = /^IMG-(?!0000)[0-9]{4}$/;
 const DATE = /^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
-const DATA_URL = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/;
+// A screenshot's data URL: data:image/png|jpeg;base64, then base64 characters and at most two
+// '=' at the end. A single pattern over the whole string was slow on large projects (hundreds
+// of MB of base64 when opening), so the parts are checked separately below.
+const DATA_URL_PREFIX = /^data:image\/(png|jpeg);base64,/;
+const NOT_BASE64 = /[^A-Za-z0-9+/]/;
+const BASE64_WHITESPACE = /[\t\n\f\r ]/;
+// True when every character is in the base64 alphabet. The built-in decoder rejects any other
+// character except ASCII whitespace and '=', which the caller has already ruled out; it is much
+// faster than a character-class scan over hundreds of MB.
+const allBase64 = (s) => {
+  if (typeof Uint8Array.fromBase64 !== 'function') return !NOT_BASE64.test(s);
+  try { Uint8Array.fromBase64(s); return true; } catch { return false; }
+};
+/** Checks a screenshot data URL. Returns null when it is not one, { tooLarge: true } when its
+ * base64 is longer than `maxBase64` (checked before anything is decoded), else
+ * { type: 'png' | 'jpeg', base64 }. */
+export function parseImageDataUrl(s, maxBase64 = Infinity) {
+  const m = DATA_URL_PREFIX.exec(s);
+  if (!m) return null;
+  if (s.length - m[0].length > maxBase64) return { tooLarge: true };
+  let end = s.length;
+  for (let pad = 0; pad < 2 && end > m[0].length && s.charCodeAt(end - 1) === 61; pad++) end--;
+  const core = s.slice(m[0].length, end);
+  if (!core.length || core.indexOf('=') !== -1 || BASE64_WHITESPACE.test(core)) return null;
+  // Whole groups of four through the decoder; the last 0-3 characters checked directly.
+  const whole = core.length - (core.length % 4);
+  if (NOT_BASE64.test(core.slice(whole)) || (whole && !allBase64(core.slice(0, whole)))) return null;
+  return { type: m[1], base64: s.slice(m[0].length) };
+}
 const SHA256 = /^[0-9a-f]{64}$/;
 const CVSS31 = /^CVSS:3\.1\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]$/;
 // Schema v7 also accepts a canonical CVSS 4.0 Base vector (the 11 Base metrics in FIRST order).
@@ -179,7 +221,7 @@ function defaultSettings({ migrated }) {
 const noLogo = () => ({ imageId: null, front: true, header: false, footer: false });
 
 /** New projects are schema v7 (createEmptyProjectV7). */
-export const createEmptyProject = (now = new Date()) => createEmptyProjectV7(now);
+export const createEmptyProject = (now = new Date()) => createEmptyProjectV8(now);
 
 /** Schema v3 empty project, kept for tests and fixtures of the v3 format. Screenshots go into
  * Additional details, so the separate Evidence gallery section starts disabled (v3 notes). */
@@ -395,6 +437,22 @@ export function migrateV6toV7(v6, { appVersion } = {}) {
   return { ...out, createdAt: v6.createdAt, savedAt: v6.savedAt, project, findings: v6.findings.map((f) => structuredClone(f)), images: v6.images.map((im) => ({ ...im })) };
 }
 
+/** Schema v8 empty project: v7 with the larger report limits. */
+export function createEmptyProjectV8(now = new Date()) {
+  const p = createEmptyProjectV7(now);
+  p.schemaVersion = 8;
+  return p;
+}
+
+/** Converts a validated schema v7 project to v8 without changing any content: only the limits
+ * a v8 file is checked against are larger. */
+export function migrateV7toV8(v7, { appVersion } = {}) {
+  const out = { format: FORMAT, schemaVersion: 8 };
+  if (appVersion !== undefined) out.appVersion = appVersion;
+  else if (v7.appVersion !== undefined) out.appVersion = v7.appVersion;
+  return { ...out, createdAt: v7.createdAt, savedAt: v7.savedAt, project: structuredClone(v7.project), findings: v7.findings.map((f) => structuredClone(f)), images: v7.images.map((im) => ({ ...im })) };
+}
+
 /** At most `max` UTF-16 units, never splitting a surrogate pair (the validators' length rule). */
 export function capUnits(s, max) {
   if (s.length <= max) return s;
@@ -514,6 +572,8 @@ export const imageId = (n) => `IMG-${String(n).padStart(4, '0')}`;
 
 /** Decodes standard base64 to bytes without relying on Buffer (runs in the browser). */
 export function base64ToBytes(b64) {
+  // The built-in decoder where there is one (same result as atob, several times faster).
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -621,7 +681,7 @@ export async function validateProjectFile(raw, rawBytes, { decodeImage } = {}) {
 /** Validates a native schema v4 file in full (every image included) and refuses any other
  * version (used by the fixtures and the exporter tests). */
 export async function validateProjectFileV4(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -631,7 +691,7 @@ export async function validateProjectFileV4(raw, rawBytes, { decodeImage } = {})
 
 /** Validates a native schema v7 file in full and refuses any other version. */
 export async function validateProjectFileV7(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -639,9 +699,19 @@ export async function validateProjectFileV7(raw, rawBytes, { decodeImage } = {})
   return validateProjectData(data, { decodeImage });
 }
 
+/** Validates a native schema v8 file in full and refuses any other version. */
+export async function validateProjectFileV8(raw, rawBytes, { decodeImage } = {}) {
+  if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
+  let data;
+  try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
+  if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
+  if (data.schemaVersion !== 8) return { ok: false, errors: ['Not a schema v8 project file.'] };
+  return validateProjectData(data, { decodeImage });
+}
+
 /** Validates a native schema v6 file in full and refuses any other version. */
 export async function validateProjectFileV6(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -651,7 +721,7 @@ export async function validateProjectFileV6(raw, rawBytes, { decodeImage } = {})
 
 /** Validates a native schema v5 file in full and refuses any other version. */
 export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {}) {
-  if (rawBytes > LIMITS.fileBytes) return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+  if (rawBytes > LIMITS_V7.fileBytes) return fileTooLarge(rawBytes, LIMITS_V7.fileBytes);
   let data;
   try { data = JSON.parse(raw); } catch { return { ok: false, errors: ['File is not valid JSON.'] }; }
   if (!isObject(data) || data.format !== FORMAT) return { ok: false, errors: ['Not a project file (missing format marker).'] };
@@ -660,8 +730,9 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 }
 
 /**
- * Opens a project file for editing: validates it in its own version, converts v1 to v6
- * on to v7, and reports whether the converted project is over the 25 MB budget.
+ * Opens a project file for editing: validates it in its own version (with that version's
+ * bounds), converts v1 to v7 on to v8, and reports whether the converted project is over
+ * the project size budget.
  * Returns { ok: false, errors, newer? } or
  * { ok: true, project, migratedFrom: 1 | 2 | 3 | 4 | 5 | 6 | null, overBudgetBytes }.
  * overBudgetBytes > 0 happens only for a converted v1-v6 file that was within the
@@ -675,7 +746,7 @@ export async function validateProjectFileV5(raw, rawBytes, { decodeImage } = {})
 async function cleanProjectImages(project) {
   let cleaned = 0;
   for (const im of project.images) {
-    const bytes = base64ToBytes(DATA_URL.exec(im.dataUrl)[2]);
+    const bytes = base64ToBytes(parseImageDataUrl(im.dataUrl).base64);
     const clean = stripImageMetadata(bytes, im.mime);
     if (!clean) return { error: `${im.id}: the screenshot could not be checked for hidden data. Add it again from the original file.` };
     if (clean === bytes) continue;
@@ -687,10 +758,17 @@ async function cleanProjectImages(project) {
   return { cleaned };
 }
 
-export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage } = {}) {
+/**
+ * `decodedImages` (optional, the app's own Map; never read from a file): screenshots this
+ * session has already decoded successfully, keyed by type, size and the SHA-256 the
+ * validator has just verified against the bytes. A screenshot found there is not decoded
+ * again; every other check still runs. Only the recovery-draft writer passes it: opening a
+ * file or a draft always decodes every screenshot.
+ */
+export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage, onProgress, decodedImages = null } = {}) {
   const parsed = parseProjectFile(raw, rawBytes);
   if (!parsed.ok) return parsed;
-  const checked = await validateProjectData(parsed.data, { decodeImage });
+  const checked = await validateProjectData(parsed.data, { decodeImage, onProgress, decodedImages });
   if (!checked.ok) return checked;
   const from = checked.project.schemaVersion;
   const images = await cleanProjectImages(checked.project);
@@ -699,7 +777,7 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage }
   if (from === SCHEMA_VERSION) {
     const size = savedSize(appVersion === undefined ? checked.project : { ...checked.project, appVersion });
     if (size > LIMITS.fileBytes) {
-      return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
+      return { ok: false, errors: [`Saved by this version the project would be ${size} bytes; the limit is ${LIMITS.fileBytes} (${megabytes(LIMITS.fileBytes)}).`] };
     }
     return { ok: true, project: checked.project, migratedFrom: null, overBudgetBytes: 0, cleanedImages };
   }
@@ -708,8 +786,9 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage }
   const v4 = from <= 3 ? migrateV3toV4(v3, { appVersion }) : checked.project;
   const v5 = from <= 4 ? migrateV4toV5(v4, { appVersion }) : checked.project;
   const v6 = from <= 5 ? migrateV5toV6(v5, { appVersion }) : checked.project;
-  const project = migrateV6toV7(v6, { appVersion });
-  // Images were fully checked in the file's own version; the v7 pass checks only the
+  const v7 = from <= 6 ? migrateV6toV7(v6, { appVersion }) : checked.project;
+  const project = migrateV7toV8(v7, { appVersion });
+  // Images were fully checked in the file's own version; the v8 pass checks only the
   // converted structure. skipImageData is internal and cannot be set by callers or files.
   const again = await validateProjectData(project, { skipImageData: true });
   if (!again.ok) return { ok: false, errors: ['The file could not be converted to the current format.', ...again.errors] };
@@ -717,9 +796,9 @@ export async function openProjectFile(raw, rawBytes, { appVersion, decodeImage }
 }
 
 function parseProjectFile(raw, rawBytes) {
-  if (rawBytes > LIMITS.fileBytes) {
-    return { ok: false, errors: [`File is ${rawBytes} bytes; the limit is ${LIMITS.fileBytes} (25 MB).`] };
-  }
+  // Before parsing, the largest cap of any version; after, the cap of the file's own version,
+  // so an older file never becomes valid just because it could convert to a larger format.
+  if (rawBytes > LIMITS_V8.fileBytes) return fileTooLarge(rawBytes, LIMITS_V8.fileBytes);
   let data;
   try {
     data = JSON.parse(raw);
@@ -732,17 +811,23 @@ function parseProjectFile(raw, rawBytes) {
   if (Number.isInteger(data.schemaVersion) && data.schemaVersion > SCHEMA_VERSION) {
     return { ok: false, errors: [`File was saved by a newer version (schema ${data.schemaVersion}); this build reads schema ${SCHEMA_VERSION}.`], newer: true };
   }
+  const own = limitsForVersion(data.schemaVersion);
+  if (own && rawBytes > own.fileBytes) return fileTooLarge(rawBytes, own.fileBytes);
   return { ok: true, data };
 }
 
-async function validateProjectData(data, { decodeImage, skipImageData = false } = {}) {
+async function validateProjectData(data, { decodeImage, skipImageData = false, onProgress, decodedImages = null } = {}) {
   const errors = [];
   const v = data.schemaVersion;
-  if (![1, 2, 3, 4, 5, 6, 7].includes(v)) return { ok: false, errors: ['Unsupported schemaVersion.'] };
+  const L = limitsForVersion(v);
+  if (!L) return { ok: false, errors: ['Unsupported schemaVersion.'] };
 
   // At most 100 messages (5 are shown): a hostile file with millions of bad entries must not
   // build millions of strings.
-  const err = (path, msg) => { if (errors.length < 100) errors.push(`${path}: ${msg}`); };
+  // `failures` counts every error, also past the 100 kept: an image is decoded only when its own
+  // checks added none, which the capped list cannot tell once it is full.
+  let failures = 0;
+  const err = (path, msg) => { failures++; if (errors.length < 100) errors.push(`${path}: ${msg}`); };
   const checkKeys = (obj, allowed, path) => {
     for (const k of Object.keys(obj)) if (!allowed.includes(k)) err(path, `unknown field "${k}"`);
   };
@@ -806,11 +891,11 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
 
   const findings = Array.isArray(data.findings) ? data.findings : (err('findings', 'must be a list'), []);
   const images = Array.isArray(data.images) ? data.images : (err('images', 'must be a list'), []);
-  const maxImages = v === 1 ? V1_MAX_IMAGES : LIMITS.images;
-  if (findings.length > LIMITS.findings) err('findings', `more than ${LIMITS.findings}`);
+  const maxImages = v === 1 ? V1_MAX_IMAGES : L.images;
+  if (findings.length > L.findings) err('findings', `more than ${L.findings}`);
   if (images.length > maxImages) err('images', `more than ${maxImages}`);
   // Over the limit, the lists are not walked at all (a 24 MB file can hold 12 million entries).
-  if (findings.length > LIMITS.findings || images.length > maxImages) return { ok: false, errors };
+  if (findings.length > L.findings || images.length > maxImages) return { ok: false, errors };
 
   const findingIds = new Set();
   const evidenceRefs = new Map();
@@ -856,7 +941,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
       else f.affectedAssets.forEach((a, j) => line(a, `${path}.affectedAssets[${j}]`, true));
     }
     if (!Array.isArray(f.evidence)) return err(`${path}.evidence`, 'must be a list');
-    if (f.evidence.length > LIMITS.evidence) return err(`${path}.evidence`, `more than ${LIMITS.evidence}`);
+    if (f.evidence.length > L.evidence) return err(`${path}.evidence`, `more than ${L.evidence}`);
     f.evidence.forEach((id, j) => { if (typeof id !== 'string' || !IMAGE_ID.test(id)) err(`${path}.evidence[${j}]`, 'invalid image id'); });
     // Rule 6/8: gallery entries and (v3) image blocks are one pool of screenshot references.
     for (const ref of (v >= 3 ? screenshotRefs(f) : f.evidence.map((imageId) => ({ imageId })))) {
@@ -865,14 +950,27 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
       evidenceRefs.set(ref.imageId, (evidenceRefs.get(ref.imageId) || 0) + 1);
     }
   });
-  if (evidenceCount > LIMITS.evidence) err('findings', `${evidenceCount} screenshot references; the limit is ${LIMITS.evidence}`);
+  if (evidenceCount > L.evidence) err('findings', `${evidenceCount} screenshot references; the limit is ${L.evidence}`);
 
   const imageIds = new Set();
   let maxImage = 0;
+  // Screenshots are decoded a few at a time (the browser decodes off the main thread); at most
+  // four are in flight, so only their bytes are held.
+  const decoding = new Set();
+  const decodeOne = async (path, bytes, mime, sniff, key) => {
+    try {
+      const d = await decodeImage(bytes, mime);
+      if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
+      else decodedImages?.set(key, true);
+    } catch {
+      err(path, 'image data cannot be decoded');
+    }
+  };
   for (let i = 0; i < images.length; i++) {
+    onProgress?.(i + 1, images.length);
     const im = images[i];
     const path = `images[${i}]`;
-    const errorsBefore = errors.length;
+    const failuresBefore = failures;
     if (!isObject(im)) { err(path, 'must be an object'); continue; }
     checkKeys(im, IMAGE_KEYS, path);
     if (typeof im.id !== 'string' || !IMAGE_ID.test(im.id)) err(`${path}.id`, 'must look like IMG-0001');
@@ -884,12 +982,12 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
     if (im.originalName !== undefined && (typeof im.originalName !== 'string' || im.originalName.length > 255)) err(`${path}.originalName`, 'invalid');
     if (skipImageData) continue;
     if (im.mime !== 'image/png' && im.mime !== 'image/jpeg') { err(`${path}.mime`, 'must be image/png or image/jpeg'); continue; }
-    const m = typeof im.dataUrl === 'string' ? DATA_URL.exec(im.dataUrl) : null;
+    const m = typeof im.dataUrl === 'string' ? parseImageDataUrl(im.dataUrl, Math.ceil(LIMITS.imageBytes / 3) * 4) : null;
+    if (m?.tooLarge) { err(`${path}`, 'image larger than 2 MB'); continue; }
     if (!m) { err(`${path}.dataUrl`, 'must be a base64 PNG or JPEG data URL'); continue; }
-    if (`image/${m[1]}` !== im.mime) err(`${path}.dataUrl`, 'type does not match mime');
-    if (m[2].length > Math.ceil(LIMITS.imageBytes / 3) * 4) { err(`${path}`, 'image larger than 2 MB'); continue; }
+    if (`image/${m.type}` !== im.mime) err(`${path}.dataUrl`, 'type does not match mime');
     let bytes;
-    try { bytes = base64ToBytes(m[2]); } catch { err(`${path}.dataUrl`, 'invalid base64'); continue; }
+    try { bytes = base64ToBytes(m.base64); } catch { err(`${path}.dataUrl`, 'invalid base64'); continue; }
     if (bytes.length > LIMITS.imageBytes) err(path, 'image larger than 2 MB');
     if (im.bytes !== bytes.length) err(`${path}.bytes`, 'does not match the image data');
     const sniff = sniffImage(bytes);
@@ -904,15 +1002,15 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
     else if (await sha256Hex(bytes) !== im.sha256) err(`${path}.sha256`, 'does not match the image data');
     // Decode only an image that passed every cheaper check, so a hostile header
     // cannot make the browser allocate a raster we already know is oversized.
-    if (decodeImage && errors.length === errorsBefore) {
-      try {
-        const d = await decodeImage(bytes, im.mime);
-        if (d.width !== sniff.width || d.height !== sniff.height) err(path, 'decoded size does not match the image header');
-      } catch {
-        err(path, 'image data cannot be decoded');
-      }
+    // im.sha256 has just been checked against the bytes, so the key names this exact content.
+    const decodedKey = `${im.mime}|${sniff.width}x${sniff.height}|${im.sha256}`;
+    if (decodeImage && failures === failuresBefore && !decodedImages?.has(decodedKey)) {
+      const job = decodeOne(path, bytes, im.mime, sniff, decodedKey).finally(() => decoding.delete(job));
+      decoding.add(job);
+      if (decoding.size >= 4) await Promise.race(decoding);
     }
   }
+  await Promise.all(decoding);
 
   // Rule 6. v1: every reference (evidence or logo) at most once. v2: evidence at most
   // once; the two logo roles may share an image but never use an evidence image.
@@ -945,7 +1043,7 @@ async function validateProjectData(data, { decodeImage, skipImageData = false } 
   const bad = findXmlInvalid(data);
   if (bad) err(bad, 'contains characters that cannot be written to Word (control characters or broken Unicode)');
 
-  return errors.length ? { ok: false, errors } : { ok: true, project: data };
+  return failures ? { ok: false, errors } : { ok: true, project: data };
 }
 
 // v3 rule 16: at most 100 blocks, unique ids, summed text within the old details bound.

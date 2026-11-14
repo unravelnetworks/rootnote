@@ -21,7 +21,7 @@ Open source means you can read, build and check the code. Rootnote has not had a
 - Word output with real styles, numbered figure captions and a findings summary that links to each finding.
 - A built-in sample report (fictional client, synthetic evidence) and starter findings.
 
-This release supports up to 20 findings and 30 screenshots per project, with a 25 MiB project-file limit. These limits reflect the report sizes we have tested, rather than a paid-tier restriction. Tell us if they prevent your normal work.
+Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows in Chrome, Edge and Firefox, on a machine with 64 GB of RAM. Reports that large need a lot of memory, and Firefox needs the most. On a machine with less RAM, work in Chrome or Edge and keep large reports smaller. These are sizes we have tested, not a paid tier. Everything in Rootnote is free. Tell us if the limits prevent your normal work.
 
 What has been tested: Windows desktop Chrome, Edge and Firefox. Basic Safari/macOS use and iPhone 11 Pro Safari exploration have been checked by hand. Safari PDF verification and native document-consumer checks (Word for Mac, LibreOffice) are still incomplete. Phone report writing and saving is not qualified.
 

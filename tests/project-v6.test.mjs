@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import JSZip from 'jszip';
 import {
-  createEmptyProjectV6 as createEmptyProject, createEmptyProjectV5, migrateV5toV6, migrateV6toV7, openProjectFile, validateProjectFile, validateProjectFileV6,
+  createEmptyProjectV6 as createEmptyProject, createEmptyProjectV5, migrateV5toV6, migrateV6toV7, migrateV7toV8, openProjectFile, validateProjectFile, validateProjectFileV6,
   projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED, CUSTOM_LIMITS, customKey, newCustomSectionId, CUSTOM_SECTION_ID, LABEL_KEYS_V6, LIMITS, defaultFormats,
 } from '../src/app/project.js';
 import { createReportPlan } from '../src/export-docx/plan.js';
@@ -65,7 +65,7 @@ test('a new project is v6: no custom sections, classification in key facts only,
   assert.ok((await validateProjectFileV6(json(d), Buffer.byteLength(json(d)))).ok);
   const r = await openProjectFile(json(d), Buffer.byteLength(json(d)));
   assert.equal(r.migratedFrom, 6, 'v6 files open converted to v7');
-  assert.deepEqual(r.project, migrateV6toV7(d));
+  assert.deepEqual(r.project, migrateV7toV8(migrateV6toV7(d)));
 });
 
 test('ids are a letter and at most 23 more word characters, random, and fit a 40-character bookmark', () => {
@@ -127,7 +127,7 @@ test('the validator refuses broken custom sections, classification and display s
   const v5 = createEmptyProjectV5(NOW);
   v5.project.customSections = [];
   assert.match((await errorsOf(v5)).join(), /unknown field "customSections"/);
-  assert.equal((await openProjectFile(json({ ...createEmptyProject(NOW), schemaVersion: 8 }), 10)).newer, true);
+  assert.equal((await openProjectFile(json({ ...createEmptyProject(NOW), schemaVersion: 9 }), 10)).newer, true);
 });
 
 test('ten sections with long titles, code text and Unicode fit and validate', async () => {

@@ -10,7 +10,7 @@ Open a finding first: a screenshot belongs to the finding that is open.
 - **Drop** PNG or JPEG files onto the finding.
 - Choose **Screenshot** in the insert bar between blocks.
 
-You can add up to 30 screenshots to a report, each up to about 2 MB. If one is not added, the message says why.
+You can add up to 400 screenshots to a report, each up to 2 MB, as long as the project file stays within 256 MB. If one is not added, the message says why.
 
 ## Caption it
 

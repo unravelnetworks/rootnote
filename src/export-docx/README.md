@@ -4,7 +4,7 @@
 
 ## Before calling it
 
-Call it only with a project that has passed the shared validator for its schema version (`src/app/project.js`) and whose images have been decoded by the browser. The exporter checks its input defensively, but it does not replace the full import checks (image hashes, real decodability, the 25 MB project budget, monotonic counters). Missing evidence or invalid data makes it reject; it never drops an image silently. A project in the over-budget recovery state must not be exported.
+Call it only with a project that has passed the shared validator for its schema version (`src/app/project.js`) and whose images have been decoded by the browser. The exporter checks its input defensively, but it does not replace the full import checks (image hashes, real decodability, the project size budget, monotonic counters). Missing evidence or invalid data makes it reject; it never drops an image silently. A project in the over-budget recovery state must not be exported.
 
 ## How it is built
 

@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { TEST_BUDGET_DIST } from './harness/test-budget.mjs';
 
 // Synthetic paste: Firefox drops clipboardData from the ClipboardEvent init, so the same
 // DataTransfer is also attached to the event object (identical in Chrome and Edge). Real
@@ -69,8 +70,8 @@ async function fresh(b) {
   await b.evaluate("document.querySelector('[data-testid=start-new]')?.click()"); // past the start screen
 }
 
-async function opened(b, file = fixture) {
-  await b.navigate(pathToFileURL(dist).href);
+async function opened(b, file = fixture, page = dist) {
+  await b.navigate(pathToFileURL(page).href);
   assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
   await b.evaluate("document.querySelector('[data-testid=start-new]')?.click()"); // past the start screen
   await b.setFile('[data-testid=open-input]', file);
@@ -218,7 +219,8 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
       await b.evaluate("document.querySelector('[data-testid=start-new]')?.click()"); // past the start screen
       await b.evaluate(GATE);
       await b.setFile('[data-testid=open-input]', fixture);
-      assert.ok(await b.waitFor('window.pendingDecodes.length === 1'));
+      // Opening decodes up to four screenshots at a time: at least one is held here.
+      assert.ok(await b.waitFor('window.pendingDecodes.length >= 1'));
       await b.evaluate(`(() => { const el = document.querySelector('[data-testid=title]'); el.value = 'EDIT DURING OPEN'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await b.evaluate(`window.releaseTimer = setInterval(() => ${RELEASE}, 10)`);
       assert.ok(await b.waitFor('!!document.querySelector("dialog.confirm")'), 'no reconfirmation dialog');
@@ -236,7 +238,8 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
       await fresh(b);
       await b.evaluate(GATE);
       await b.setFile('[data-testid=open-input]', fixture);
-      assert.ok(await b.waitFor('window.pendingDecodes.length === 1'));
+      // Opening decodes up to four screenshots at a time: at least one is held here.
+      assert.ok(await b.waitFor('window.pendingDecodes.length >= 1'));
       await b.evaluate("document.querySelector('[data-testid=new-project]').click()");
       assert.ok(await b.waitFor("!!document.querySelector('dialog [data-choice=blank]')"));
       await b.evaluate("document.querySelector('dialog [data-choice=blank]').click()");
@@ -295,12 +298,14 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
         dt.items.add(new File([new Uint8Array(2097153)], 'big.png', { type: 'image/png' }));
         document.dispatchEvent(Object.defineProperty(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }), 'clipboardData', { value: dt }));
       })()`);
-      assert.ok(await b.waitFor("document.querySelector('.status').textContent.includes('over the 2 MB limit')"));
+      assert.ok(await b.waitFor("document.querySelector('.status').textContent.includes('The most Rootnote accepts is 2 MB per image')"));
       assert.equal(await b.evaluate('window.reads'), 0);
     });
 
-    await t.test('screenshots that would push the project past 25 MB are refused, so it stays saveable', async () => {
-      await opened(b);
+    // On the test-only budget build (25 MiB limit; tests/harness/test-budget.mjs): the same code
+    // as the released build, with a limit small screenshots can reach.
+    await t.test('screenshots that would push the project past its limit are refused, so it stays saveable', async () => {
+      await opened(b, fixture, TEST_BUDGET_DIST);
       const png = noisyPng(780, 780).toString('base64'); // ~1.8 MB, ~2.4 MB as base64
       await b.evaluate(`(() => {
         const bytes = Uint8Array.from(atob(${JSON.stringify(png)}), (c) => c.charCodeAt(0));
@@ -308,7 +313,7 @@ for (const engine of ['chrome', 'firefox']) test(`editor async races in ${engine
         for (let i = 0; i < 12; i++) dt.items.add(new File([bytes], 'noise' + i + '.png', { type: 'image/png' }));
         document.dispatchEvent(Object.defineProperty(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }), 'clipboardData', { value: dt }));
       })()`);
-      assert.ok(await b.waitFor("document.querySelector('.status').textContent.includes('exceed the 25 MB limit')", 60000));
+      assert.ok(await b.waitFor("document.querySelector('.status').textContent.includes('would take the project over 25 MB')", 60000));
       const s = await b.evaluate(snap);
       assert.ok(s.images.length > 6 && s.images.length < 18, `unexpected image count ${s.images.length}`);
       assert.ok(Buffer.byteLength(JSON.stringify(s, null, 1)) <= 26214400 - 1024);

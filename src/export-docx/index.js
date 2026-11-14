@@ -64,8 +64,8 @@ function summary(findings,accent){
 
 /** @returns {Promise<Uint8Array>} Genuine OOXML package; UI owns native save/download. */
 export async function exportDocx(project,{paperSize=project?.project?.paperSize}={}) {
- if(project?.schemaVersion===7){const problem=cvssExportProblem(project);if(problem)throw Error(problem);}
- if([2,3,4,5,6,7].includes(project?.schemaVersion))return exportDocxV2(project,{paperSize});
+ if(project?.schemaVersion>=7){const problem=cvssExportProblem(project);if(problem)throw Error(problem);}
+ if([2,3,4,5,6,7,8].includes(project?.schemaVersion))return exportDocxV2(project,{paperSize});
  if(project?.format!=='fieldnote-project'||project.schemaVersion!==1||!PAPERS[paperSize])throw Error('Unsupported project or paper size.');
  if(!Array.isArray(project.findings)||project.findings.length>20||!Array.isArray(project.images)||project.images.length>31)throw Error('Project exceeds supported bounds.');
  const p=project.project,paper=PAPERS[paperSize],accent=/^#[0-9a-fA-F]{6}$/.test(p.accentColor||'')?p.accentColor.slice(1):'253F78';

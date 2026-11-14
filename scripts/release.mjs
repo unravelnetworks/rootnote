@@ -1,7 +1,8 @@
 // Builds the release folder and a reproducible ZIP:
 //   release/rootnote-<version>/  rootnote.html, README.md, guide.html, LICENSE, THIRD-PARTY-NOTICES.txt
 //                                 (the reviewed notices, also embedded in rootnote.html),
-//                                 sample-project.rootnote.json, sample-report.docx,
+//                                 sample-project.rootnote.json, sample-report.docx (CVSS 3.1),
+//                                 sample-project-cvss40.rootnote.json, sample-report-cvss40.docx,
 //                                 starters/*.rootnote.json (neutral starter projects),
 //                                 VERSION.txt, SHA256SUMS.txt
 //   release/rootnote-<version>.zip
@@ -26,7 +27,10 @@ if (git('status', '--porcelain', '--untracked-files=no')) {
 const commit = git('rev-parse', 'HEAD');
 const commitDate = new Date(Number(git('log', '-1', '--format=%ct')) * 1000);
 
-execFileSync(process.execPath, [at('scripts/build.mjs')], { cwd: root, stdio: 'inherit' });
+// The test-only budget setting builds into dist-test/ and would leave an old dist/ in place.
+if (process.env.TEST_BUDGET_BYTES) throw new Error('TEST_BUDGET_BYTES is set: unset it to build a release.');
+const { TEST_BUDGET_BYTES: _unset, ...buildEnv } = process.env;
+execFileSync(process.execPath, [at('scripts/build.mjs')], { cwd: root, stdio: 'inherit', env: buildEnv });
 
 // The showcase sample (fictional client, real-looking logos and synthetic screenshots),
 // never a test fixture. Its Word files are
@@ -35,6 +39,8 @@ execFileSync(process.execPath, [at('scripts/build.mjs')], { cwd: root, stdio: 'i
 const sample = {
   project: await readFile(at('release-template/sample-project.rootnote.json')),
   docx: await normalizeDocx(await readFile(at('release-template/sample-report.docx')), commitDate),
+  project40: await readFile(at('release-template/sample-project-cvss40.rootnote.json')),
+  docx40: await normalizeDocx(await readFile(at('release-template/sample-report-cvss40.docx')), commitDate),
 };
 
 for (const { name, html } of [{ name: `rootnote-${APP_VERSION}`, html: 'rootnote.html' }]) {
@@ -52,6 +58,8 @@ for (const { name, html } of [{ name: `rootnote-${APP_VERSION}`, html: 'rootnote
   files.set('THIRD-PARTY-NOTICES.txt', await readFile(at('release-template/THIRD-PARTY-NOTICES.md')));
   files.set('sample-project.rootnote.json', sample.project);
   files.set('sample-report.docx', sample.docx);
+  files.set('sample-project-cvss40.rootnote.json', sample.project40);
+  files.set('sample-report-cvss40.docx', sample.docx40);
   for (const name of ['web-application-test', 'api-test']) files.set(`starters/${name}.rootnote.json`, await readFile(at(`release-template/starters/${name}.rootnote.json`)));
   files.set('VERSION.txt', Buffer.from([
     `version: ${APP_VERSION}`,

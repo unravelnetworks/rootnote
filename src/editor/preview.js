@@ -10,9 +10,17 @@ const TALL_MODES = [['auto', 'Automatic'], ['split', 'Split into parts'], ['fit'
 /**
  * Renders `plan` into `host` (which must be in the document, so blocks can be measured).
  * `onTallMode(imageId, mode)` is called when a screenshot's fit/split choice changes;
- * `images` maps image id to the project's image record.
+ * `images` maps image id to the project's image record. `imagesFor`, a Set of image ids,
+ * draws only those screenshots (the live page); null draws all.
+ *
+ * The live page lays out one finding at a time. Each finding after the first starts a new
+ * page and findings come last, so a finding's pages depend only on its own content:
+ * `only: { findingId, bodyOffset, bodyTotal }` renders just that finding (with the Findings
+ * heading when it is the first), numbering its pages from bodyOffset + 1 of bodyTotal (no
+ * numbers while they are unknown); `frontOnly` renders everything before the findings.
+ * Returns the number of body pages rendered.
  */
-export function renderPreview(host, plan, { images, onTallMode }) {
+export function renderPreview(host, plan, { images, onTallMode, imagesFor = null, only = null, frontOnly = false }) {
   const g = plan.geometry;
   const px = (n) => `${Math.round(n * 100) / 100}px`;
   const assets = new Map(plan.imageAssets.map((im) => [im.id, im]));
@@ -65,7 +73,7 @@ export function renderPreview(host, plan, { images, onTallMode }) {
     pages.append(page);
     if (kind === 'body') {
       // Without a cover the first body page carries the front logos, so its header has none.
-      const logos = bodyPages.length ? plan.running.headerLogos : plan.running.firstPageHeaderLogos;
+      const logos = bodyPages.length || only ? plan.running.headerLogos : plan.running.firstPageHeaderLogos;
       if (logos.length) header.append(logoRow(logos));
       header.append(h('div', { class: 'pv-running pv-running-title' }, plan.running.title));
       bodyPages.push({ page, footer });
@@ -101,11 +109,12 @@ export function renderPreview(host, plan, { images, onTallMode }) {
     h('div', { class: 'pv-title-rule' }),
     plan.cover.details.length ? h('table', { class: 'pv-cover-details' }, h('tbody', {}, ...plan.cover.details.map((r) => h('tr', {}, h('th', {}, r.label), h('td', {}, r.value))))) : null,
     m.classification ? h('p', { class: cover ? 'pv-classification pv-classification-cover' : 'pv-classification' }, m.classification) : null];
-  if (plan.cover.enabled) newPage('cover').append(h('div', { class: 'pv-cover' }, ...front(true)));
+  if (only) { /* one finding: no front matter */ }
+  else if (plan.cover.enabled) newPage('cover').append(h('div', { class: 'pv-cover' }, ...front(true)));
   else place(h('div', { class: 'pv-titleblock' }, ...front(false)));
 
   // ---- report sections ----
-  for (const s of plan.reportSections) {
+  for (const s of only ? [] : plan.reportSections) {
     // Without a cover the title block stands alone: the first section starts a new page.
     // The summary heading is the one target of the back-to-summary links, as in Word, so a
     // return lands above the count tables.
@@ -148,8 +157,10 @@ export function renderPreview(host, plan, { images, onTallMode }) {
   }
 
   // ---- findings ----
-  if (plan.findings.length) place(h('h1', { class: 'pv-chapter', ...(plan.findingsAnchor ? { id: `pv-${plan.findingsAnchor}` } : {}) }, plan.labels.findings), { newPageBefore: true });
+  const firstOnly = only && plan.findings[0]?.id === only.findingId;
+  if (plan.findings.length && !frontOnly && (!only || firstOnly)) place(h('h1', { class: 'pv-chapter', ...(plan.findingsAnchor ? { id: `pv-${plan.findingsAnchor}` } : {}) }, plan.labels.findings), { newPageBefore: true });
   plan.findings.forEach((f, i) => {
+    if (frontOnly || (only && f.id !== only.findingId)) return;
     place(h('h1', { class: 'pv-finding', id: `pv-${f.anchor}` }, h('span', { class: 'pv-finding-id' }, `${f.displayId} `), f.title || '(untitled)'), { newPageBefore: i > 0 });
     place(h('table', { class: 'pv-keyfacts' }, h('tbody', {}, ...f.keyFacts.map((k) => h('tr', {}, h('th', {}, k.label),
       h('td', badgeAttrs(k.badge), h('div', {}, k.value), k.detail ? h('div', { class: 'pv-keyfacts-detail' }, k.detail) : null))))));
@@ -174,7 +185,7 @@ export function renderPreview(host, plan, { images, onTallMode }) {
       for (const ev of s.images) placeEvidence(ev);
     }
   });
-  if (!body) newPage('body');
+  if (!body && !frontOnly) newPage('body');
 
   function badgeAttrs(badge) {
     return badge ? { class: 'pv-badge', style: `background: #${badge.fill}; color: #${badge.textColor}` } : {};
@@ -196,8 +207,11 @@ export function renderPreview(host, plan, { images, onTallMode }) {
     const im = assets.get(ev.imageId);
     ev.parts.forEach((part) => {
       const scale = part.width / part.sourceWidth;
+      // `imagesFor` (the live page): only the shown finding's screenshots are drawn; the
+      // others keep their exact box, so pagination and page numbers do not change.
+      const drawn = !imagesFor || imagesFor.has(ev.imageId);
       const crop = h('div', { class: 'pv-crop', style: `width: ${px(part.width)}; height: ${px(part.height)}` },
-        h('img', { src: im.dataUrl, alt: `${plan.labels.figure} ${ev.figure}${part.captionSuffix}`, style: `width: ${px(im.width * scale)}; height: ${px(im.height * (part.height / part.sourceHeight))}; top: ${px(-part.y * (part.height / part.sourceHeight))}` }));
+        drawn && h('img', { src: im.dataUrl, alt: `${plan.labels.figure} ${ev.figure}${part.captionSuffix}`, style: `width: ${px(im.width * scale)}; height: ${px(im.height * (part.height / part.sourceHeight))}; top: ${px(-part.y * (part.height / part.sourceHeight))}` }));
       const caption = h('p', { class: 'pv-caption' }, `${plan.labels.figure} ${ev.figure}: ${ev.caption}${part.captionSuffix}`);
       const control = part.index === 1 ? tallControl(ev, part.count) : null;
       place(h('figure', { class: 'pv-figure', dataset: { image: ev.imageId, part: String(part.index) } }, control, crop, caption));
@@ -217,7 +231,7 @@ export function renderPreview(host, plan, { images, onTallMode }) {
   bodyPages.forEach(({ footer }, k) => {
     if (plan.running.footerLogos.length) footer.append(logoRow(plan.running.footerLogos));
     footer.append(h('div', { class: 'pv-running pv-running-footer' }, h('span', {}, plan.running.footerPrefix),
-      h('span', {}, `${plan.labels.page} ${k + 1} ${plan.labels.pageOf} ${bodyPages.length}`)));
+      only && only.bodyOffset == null ? h('span', {}) : h('span', {}, `${plan.labels.page} ${k + 1 + (only?.bodyOffset ?? 0)} ${plan.labels.pageOf} ${only ? only.bodyTotal : bodyPages.length}`)));
   });
   return { bodyPages: bodyPages.length, coverPage: plan.cover.enabled };
 }

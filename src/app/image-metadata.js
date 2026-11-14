@@ -170,7 +170,12 @@ export function stripImageMetadata(bytes, mime) {
   const out = new Uint8Array(length);
   let at = 0;
   for (const p of result.parts) { out.set(p, at); at += p.length; }
-  if (length === bytes.length && out.every((v, k) => v === bytes[k])) return bytes;
+  // Unchanged files are returned as they are (a plain loop: this runs on every screenshot).
+  if (length === bytes.length) {
+    let same = true;
+    for (let k = 0; k < length; k++) if (out[k] !== bytes[k]) { same = false; break; }
+    if (same) return bytes;
+  }
   return out;
 }
 
