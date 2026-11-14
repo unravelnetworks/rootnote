@@ -7,7 +7,7 @@ The step-by-step guide is in `guide.html` in this folder (it works offline) and 
 ## Quick start
 
 1. Open `rootnote.html` in current **Google Chrome**, **Microsoft Edge** or **Firefox** (double-click it, or drag it into a browser window). See *Browsers* below for what differs between them.
-2. Choose **New report**, or **Open a project** to continue a saved one. To see a finished report first, choose **Open the sample**: it is built into Rootnote and uses a fictional client and synthetic evidence. The same project is included as `sample-project.rootnote.json`, and `sample-report.docx` is the Word file it produces.
+2. Choose **New report**, or **Open a project** to continue a saved one. To see a finished report first, choose **Open the sample**: it is built into Rootnote and uses a fictional client and synthetic evidence. The same project is included as `sample-project.rootnote.json`, and `sample-report.docx` is the Word file it produces. `sample-project-cvss40.rootnote.json` and `sample-report-cvss40.docx` are the same report scored with CVSS 4.0 instead of 3.1.
 3. Fill in **Details & cover**. In **Sections & scoring**, choose the report sections, their order and names, add up to 10 of your own sections, and pick the scoring: severity, risk or CVSS (3.1 or 4.0 Base), alone or with CVSS.
 4. Click **New finding** for each finding. Set the rating (or use the CVSS calculator), affected assets, status, vulnerability type and CWE, then write the sections.
 5. In **Additional details**, write the steps and put screenshots between the text where they belong:
