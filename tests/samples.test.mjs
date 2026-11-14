@@ -42,5 +42,10 @@ test('the committed CVSS 4.0 Word report shows CVSS 4.0 only', async () => {
   const text = (await (await JSZip.loadAsync(read('sample-report-cvss40.docx'))).file('word/document.xml').async('string')).replace(/<[^>]+>/g, '');
   assert.match(text, /CVSS 4\.0 Base/);
   assert.equal((text.match(/CVSS:4\.0\//g) || []).length, 6);
+  // Each scored finding's score and vector, as in the project.
+  const v40 = JSON.parse(read('sample-project-cvss40.rootnote.json'));
+  const scored = v40.findings.filter((f) => f.cvss).map((f) => [f.id, parseCvss40(f.cvss).score.toFixed(1), f.cvss]);
+  assert.deepEqual(scored.map(([, s]) => s), ['9.3', '8.6', '8.4', '5.3', '6.9', '2.3']);
+  for (const [id, score, vector] of scored) assert.ok(text.includes(score + vector), `${id}: ${score} ${vector} not in the Word report`);
   assert.doesNotMatch(text, /CVSS 3\.1|CVSS:3\.1/);
 });
