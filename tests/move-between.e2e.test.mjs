@@ -88,6 +88,17 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
     await b.evaluate(nav(f1.title.slice(0, 20)));
     assert.ok(await b.waitFor("!!document.querySelector('[data-testid=move-finding-open]')"));
 
+    await t.test('no view shows a stray null, undefined or false as text', async () => {
+      const views = await b.evaluate("[...document.querySelectorAll('.navitem')].map((e) => e.textContent.trim())");
+      const stray = "[...document.querySelectorAll('nav, main')].flatMap((r) => { const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (/^(null|undefined|false)$/.test(w.currentNode.nodeValue.trim())) out.push(w.currentNode.parentElement.className || w.currentNode.parentElement.tagName); return out; })";
+      for (const v of views) {
+        await b.evaluate(nav(v));
+        assert.deepEqual(await b.evaluate(stray), [], `in ${v}`);
+      }
+      await b.evaluate(nav(f1.title.slice(0, 20)));
+      assert.ok(await b.waitFor("!!document.querySelector('[data-testid=move-finding-open]')"));
+    });
+
     await t.test('a text block goes to the end of the other finding; Undo restores the exact project', async () => {
       const before = await b.evaluate(snap);
       const blk = before.findings[0].details[1];

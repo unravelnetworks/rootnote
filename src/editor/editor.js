@@ -450,7 +450,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       ),
       h('button', { type: 'button', class: 'add', 'data-testid': 'add-finding', disabled: doc.findings.length >= maxFindings || !canIssueFinding(), onclick: addFinding },
         ...(doc.findings.length >= maxFindings ? [`Limit of ${maxFindings} findings reached`] : [icon('plus'), 'New finding'])),
-      doc.findings.length >= maxFindings && maxFindings === LIMITS.findings ? h('p', { class: 'hint' }, FINDINGS_FULL) : null,
+      // replaceChildren prints null as text, unlike h(): spread an empty list instead.
+      ...(doc.findings.length >= maxFindings && maxFindings === LIMITS.findings ? [h('p', { class: 'hint' }, FINDINGS_FULL)] : []),
       h('ul', {}, item('library', 'Finding library', h('span', { class: 'fid' }, `${library.entries.length}${libraryDirty ? ' •' : ''}`))),
       h('p', { class: 'navhead' }, 'Output'),
       h('ul', {}, item('preview', 'Preview report'), item('export', 'Check & export')),
@@ -1894,8 +1895,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         h('div', { class: 'row sect-head' }, heading('details'), h('span', { class: 'spacer' }),
           blocksOf(f).length ? h('span', { class: 'fmt' }, `${plural(texts, 'text block')} · ${plural(shots, 'screenshot')}`) : null),
         h('p', { class: 'hint details-help' }, 'How to reproduce it, with screenshots where they belong. Ctrl+V pastes a screenshot after the box you are in.'),
-        blocksOf(f).length ? insertBar(null) : null,
-        ...(blocksOf(f).length ? items : [textBox(null, 0), insertBar(null, true)]),
+        ...(blocksOf(f).length ? [insertBar(null), ...items] : [textBox(null, 0), insertBar(null, true)]),
         dropZone(() => ({ where: 'details', after: blocksOf(f).at(-1)?.id ?? null }), h('p', { class: 'hint' }, 'Drop PNG or JPEG files here to add them at the end (up to 2 MB and 16 megapixels each).')));
     };
 
