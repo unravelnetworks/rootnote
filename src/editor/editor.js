@@ -28,6 +28,7 @@ import { defaultRatingMethodText } from '../app/rating-method.js';
 import { ratingBadge, cvssBadge } from '../export-docx/design.js';
 import { renderPreview } from './preview.js';
 import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft } from './draft.js';
+import { projectParts, partsToBlob } from '../app/serialize.js';
 
 const DECODE_BATCH = 4;
 const CVSS_METRICS = [
@@ -2855,41 +2856,67 @@ ${e.title}`.toLowerCase().includes(q));
     return JSON.stringify(out, replacer);
   }
 
+  /** The project file as of now: string parts (a snapshot; strings do not change) and its
+   * exact size in bytes. Same bytes as serialize(savedAt), without one giant string. */
+  function snapshotFile(savedAt) {
+    const split = projectParts({ ...doc, appVersion, savedAt });
+    if (split) return split;
+    const text = serialize(savedAt);
+    return { parts: [text], bytes: new TextEncoder().encode(text).length };
+  }
+
   /** Saves the project. `target` writes to that file handle instead of the current one (an
    * engagement folder). Returns 'saved', 'saved-edited' (written, but the project changed
-   * meanwhile), 'other-project', 'download', 'cancelled', 'busy', 'too-big' or 'failed'. */
+   * meanwhile), 'other-project', 'download', 'download-edited', 'cancelled', 'busy',
+   * 'too-big' or 'failed'. */
   async function saveProject({ saveAs = false, download = false, target = null } = {}) {
     if (saving) { say('The project is still being saved.', 'error'); return 'busy'; }
-    // Serialize synchronously at the moment of the click, so the file holds exactly the
-    // state the user saved, and remember which edit that was.
+    // Take the file synchronously at the moment of the click, so it holds exactly the state
+    // the user saved, and remember which edit that was. The bytes are built afterwards in
+    // small steps (partsToBlob), so a large project does not hold the page.
     const savedAt = new Date().toISOString();
-    const bytes = new TextEncoder().encode(serialize(savedAt));
-    if (bytes.length > LIMITS.fileBytes) {
-      say(`The project is ${(bytes.length / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
+    const file = snapshotFile(savedAt);
+    if (file.bytes > LIMITS.fileBytes) {
+      say(`The project is ${(file.bytes / 1048576).toFixed(1)} MB, over the ${CAP} limit. Remove or shrink screenshots before saving.`, 'error');
       return 'too-big';
     }
     const name = `${fileStem()}.rootnote.json`;
     // A file from an engagement folder can be written whether or not a save dialog exists.
-    if (!target && (download || (!canPickSaveLocation() && !(projectHandle && !saveAs)))) {
-      downloadBytes(bytes, name, 'application/json');
-      doc.savedAt = savedAt;
-      fileInfo = { kind: 'download', at: new Date() };
-      markClean();
-      // A browser download cannot be confirmed from the page, so say what actually happened.
-      say(`Project file "${name}" sent to your browser's downloads. Check that the download finished and keep a backup copy; ${storageClaim()}.${takeFormatNotice()}`);
-      return 'download';
-    }
+    const toDownload = !target && (download || (!canPickSaveLocation() && !(projectHandle && !saveAs)));
     const gen = generation;
     const rev = revision;
     saving = true;
+    const build = async () => {
+      const blob = await partsToBlob(file.parts);
+      if (blob.size !== file.bytes) throw new Error('the project file could not be prepared');
+      return blob;
+    };
     try {
+      if (toDownload) {
+        downloadBytes(await build(), name, 'application/json');
+        // A browser download cannot be confirmed from the page, so say what actually happened.
+        if (gen !== generation) {
+          say(`Project file "${name}" sent to your browser's downloads with the project as it was when you clicked Save; a different project is open now.`);
+          return 'other-project';
+        }
+        doc.savedAt = savedAt;
+        fileInfo = { kind: 'download', at: new Date() };
+        if (rev === revision) {
+          markClean();
+          say(`Project file "${name}" sent to your browser's downloads. Check that the download finished and keep a backup copy; ${storageClaim()}.${takeFormatNotice()}`);
+          return 'download';
+        }
+        say(`Project file "${name}" sent to your browser's downloads, but you changed the project while it was being prepared. Those changes are not in the file yet; save again.`);
+        return 'download-edited';
+      }
       let handle = target ?? (saveAs ? null : projectHandle);
       if (!handle) {
         // First await of the gesture: the dialog must open before anything else is awaited.
         handle = await pickSaveFile({ suggestedName: name, description: 'Rootnote project', mime: 'application/json', extension: '.json', id: 'fieldnote-project', startIn: folderHint });
         if (!handle) { say('Save cancelled. Nothing was written.'); return 'cancelled'; }
       }
-      await writeToHandle(handle, bytes, { onAsk: () => say(`Your browser is asking whether this page may edit "${handle.name}". Answer its prompt at the top of the window to finish saving.`) });
+      const blob = await build();
+      await writeToHandle(handle, blob, { onAsk: () => say(`Your browser is asking whether this page may edit "${handle.name}". Answer its prompt at the top of the window to finish saving.`) });
       folderHint = handle;
       if (gen !== generation) {
         say(`"${handle.name}" was saved with the project as it was when you clicked Save; a different project is open now.`);
@@ -2906,7 +2933,7 @@ ${e.title}`.toLowerCase().includes(q));
       say(`Saved "${handle.name}", but you changed the project while it was being saved. Those changes are not in the file yet; save again.`);
       return 'saved-edited';
     } catch (err) {
-      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}. You can use Download instead.`, 'error');
+      say(`The project was not saved: ${engagementErrorText(err)}. Your work is still open${dirty ? ' with unsaved changes' : ''}.${toDownload ? '' : ' You can use Download instead.'}`, 'error');
       return 'failed';
     } finally {
       saving = false;
