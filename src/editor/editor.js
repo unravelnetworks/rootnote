@@ -3119,12 +3119,14 @@ Third-party software notices
   const newDraftRev = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
   // Independent review F3: on a file:// page every local HTML file shares this storage.
   const DRAFT_DISCLOSURE = 'Keep an unencrypted recovery draft in this browser profile. It includes screenshots. Because the app runs from a file on your disk, any other web page or HTML file you open from this computer\'s disk in this browser can read or replace the draft, and anyone with access to this profile may be able to read it. Leave it off if you open HTML files from targets or tools in this browser. Save a project file for your own backup. Turning this off deletes the draft and reports whether that worked.';
-  const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false };
+  // checking: the draft found at startup is still being read and checked; nothing is written
+  // until that ends, so no new draft can replace it unseen.
+  const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false, checking: true };
   const draftNote = h('span', { class: 'draft-note', 'data-testid': 'draft-note', hidden: true });
   const draftBanner = h('div', { class: 'recovery', role: 'region', 'aria-label': 'Recovery draft', hidden: true, 'data-testid': 'draft-banner' });
   dirtyBadge.after(draftNote);
   recoveryBanner.after(draftBanner);
-  const draftWanted = () => draftState.enabled && !draftState.sessionOff && !draftState.pending;
+  const draftWanted = () => draftState.enabled && !draftState.sessionOff && !draftState.pending && !draftState.checking;
   // Says only what this tab knows: never claims the browser holds nothing.
   const storageClaim = () => (draftState.enabled ? 'recovery drafts are on, so a draft is also kept in this browser'
     : draftState.maybeStored ? 'a recovery draft may still be stored in this browser (its deletion could not be confirmed)'
@@ -3327,9 +3329,9 @@ Third-party software notices
   readDraftState().then(async (state) => {
     draftState.enabled = state.enabled;
     draftState.epoch = state.epoch;
-    if (state.enabled && state.draft && !dirty && revision === 0) {
+    try {
+      if (!state.enabled || !state.draft) return;
       const d = state.draft;
-      const gen = generation;
       let check = { ok: false };
       let problem = null;
       try {
@@ -3338,20 +3340,26 @@ Third-party software notices
         if (!check.ok) problem = (check.errors || []).slice(0, 2).join(' · ') || 'it is not a valid project';
         else if (check.overBudgetBytes > 0) problem = `it is over the ${CAP} limit`;
       } catch (err) { problem = err?.message || 'it could not be read'; }
-      // Offer only if nothing changed meanwhile, here or in another tab: still on, same
-      // epoch and the same draft in the store. A draft that opens is offered only to the same
-      // clean project; one that cannot be opened is shown anyway, so no new draft replaces it.
-      let now = null;
-      try { now = await readDraftState(); } catch { now = null; }
-      const same = now && !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
+      // Offer it if it is still the stored draft (here or in another tab: still on, same epoch,
+      // same record), also when the project was edited meanwhile: Restore asks before
+      // replacing work. One that cannot be opened is offered with Discard only.
+      let now;
+      try { now = await readDraftState(); } catch {
+        draftState.sessionOff = true; // cannot confirm what is stored: write nothing over it
+        say('Recovery drafts are paused in this tab: the stored draft could not be checked. Save the project to a file.', 'error');
+        return;
+      }
+      const same = !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
         now.enabled && now.epoch === state.epoch && sameDraft(now.draft, d);
-      if (same && problem) offerDraft(d, 0, problem);
-      else if (same && revision === 0 && gen === generation) offerDraft(d, check.project.findings.length);
-      else if (now && !now.enabled) draftState.enabled = false;
+      if (same) offerDraft(d, problem ? 0 : check.project.findings.length, problem);
+      else if (!now.enabled) draftState.enabled = false;
+    } finally {
+      draftState.checking = false;
+      showDraftNote();
+      if (view === 'export') renderMain();
+      if (dirty && draftWanted()) scheduleDraft();
     }
-    showDraftNote();
-    if (view === 'export') renderMain();
-  }, () => { draftState.supported = false; if (view === 'export') renderMain(); });
+  }, () => { draftState.supported = false; draftState.checking = false; if (view === 'export') renderMain(); });
 
   render();
   // Test hook: read-only snapshot of state, used by the browser tests.

@@ -257,6 +257,74 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`opt-in
       assert.ok(await waitDraft('Edited after an unreadable draft'), 'drafts resume after Discard');
     });
 
+    const rev = () => b.evaluate(IDB(`(s, done) => { const d = s.get('draft'); d.onsuccess = () => done(d.result?.rev ?? d.result?.json?.length ?? null); }`));
+    const banner = "!document.querySelector('[data-testid=draft-banner]').hidden";
+    const releaseDecodes = () => b.evaluate('window.releaseAll = true; (window.pendingDecodes || []).splice(0).forEach((f) => f())');
+    const keepImageDraft = async (title) => {
+      await fresh();
+      await releaseDecodes();
+      if (await b.evaluate(banner)) { await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()"); assert.ok(await b.waitFor(`!(${banner})`)); }
+      await b.setFile('[data-testid=open-input]', fixture);
+      if (await b.waitFor("!!document.querySelector('dialog.confirm')", 2000)) await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings.length === 3`));
+      await releaseDecodes();
+      await b.evaluate(type('[data-testid=title]', title));
+      assert.ok(await waitDraft(title));
+      return rev();
+    };
+
+    await t.test('an edit while the startup check runs cannot replace the stored draft', async () => {
+      const kept = await keepImageDraft('Kept through a paused check');
+      await fresh(); // the startup check pauses on the held screenshot decodes
+      assert.ok(await b.waitFor('window.pendingDecodes.length > 0'), 'startup check paused');
+      await b.evaluate(type('[data-testid=title]', 'Typed during the check'));
+      await sleep(5500);
+      assert.equal(await rev(), kept, 'unchanged while the check runs');
+      await releaseDecodes();
+      assert.ok(await b.waitFor(banner), 'offered after the check, although the project was edited');
+      await sleep(5500);
+      assert.equal(await rev(), kept, 'unchanged while offered');
+      await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()");
+      assert.ok(await waitDraft('Typed during the check'), 'drafts resume after Discard');
+    });
+
+    await t.test('a startup check that ends in an error keeps the stored draft too', async () => {
+      const kept = await keepImageDraft('Kept through a failed check');
+      await fresh();
+      assert.ok(await b.waitFor('window.pendingDecodes.length > 0'), 'startup check paused');
+      await b.evaluate(type('[data-testid=title]', 'Typed during a failing check'));
+      // Screenshots not yet decoded fail; the held ones finish.
+      await b.evaluate("window.createImageBitmap = () => Promise.reject(new Error('decode failed (injected)')); 0");
+      await releaseDecodes();
+      assert.ok(await b.waitFor(`${banner} && /cannot be opened/.test(document.querySelector('[data-testid=draft-banner]').textContent)`), 'shown as unreadable');
+      await sleep(5500);
+      assert.equal(await rev(), kept, 'unchanged');
+      await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()");
+      assert.ok(await b.waitFor(`!(${banner})`));
+    });
+
+    await t.test('an edit before the store is read cannot replace the stored draft', async () => {
+      const kept = await keepImageDraft('Kept while the store opens slowly');
+      // Holds the success of every database open in this tab until released (this test only).
+      await b.addInitScript(`if (sessionStorage.getItem('holdOpen') === '1') { window.__heldOpens = []; const o = IDBFactory.prototype.open;
+        IDBFactory.prototype.open = function (...a) { const r = o.apply(this, a); let h = null;
+          Object.defineProperty(r, 'onsuccess', { configurable: true, get: () => h, set: (fn) => { h = fn; } });
+          r.addEventListener('success', (e) => { const go = () => h && h.call(r, e); if (window.__heldOpens) window.__heldOpens.push(go); else go(); }); return r; };
+        window.releaseOpens = () => { const q = window.__heldOpens; window.__heldOpens = null; q.forEach((f) => f()); }; }`);
+      await b.evaluate("sessionStorage.setItem('holdOpen', '1')");
+      await fresh();
+      assert.ok(await b.waitFor('window.__heldOpens && window.__heldOpens.length > 0'), 'store read held');
+      await b.evaluate(type('[data-testid=title]', 'Typed before the store was read'));
+      await sleep(5500);
+      await b.evaluate("sessionStorage.removeItem('holdOpen'); window.releaseOpens()");
+      await releaseDecodes();
+      assert.ok(await b.waitFor(banner), 'offered once read');
+      await sleep(5500);
+      assert.equal(await rev(), kept, 'unchanged');
+      await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()");
+      assert.ok(await b.waitFor(`!(${banner})`));
+    });
+
     await t.test('if deleting the draft fails, messages never claim the browser holds nothing', async () => {
       await fresh();
       await b.evaluate("IDBObjectStore.prototype.delete = function () { throw new DOMException('injected', 'UnknownError'); }; 0");

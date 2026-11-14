@@ -161,6 +161,24 @@ test('the released build at its 256 MiB limit in chrome', { skip: !installed('ch
       assert.equal(again.digest, expected, 'the reopened project is the saved one');
       assert.equal(await b.evaluate(`${snap}.findings[0].title`), 'Finding 1 at the limit');
     });
+    await t.test('opening another project while the file is being prepared: the file is the old project, the new one is not marked saved', async () => {
+      const dl = join(out, 'other');
+      mkdirSync(dl, { recursive: true });
+      await b.allowDownloads(dl);
+      const expected = (await b.evaluate(STATE)).digest;
+      await b.evaluate("(() => { const st = window.setTimeout; window.__held = []; window.setTimeout = (f, d, ...a) => (d ? st(f, d, ...a) : (window.__held.push(() => f(...a)), 0)); window.__release = () => { window.setTimeout = st; window.__held.splice(0).forEach((f) => st(f, 0)); }; })()");
+      await b.evaluate("document.querySelector('[data-testid=save]').click()");
+      assert.ok(await b.waitFor('window.__held.length > 0', 30000), 'the build did not pause');
+      await b.setFile('[data-testid=open-input]', here('./fixtures/small.json'));
+      if (await b.waitFor("!!document.querySelector('dialog.confirm')", 3000)) await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings.length === 3`, 60000), 'the other project opened');
+      await b.evaluate('window.__release()');
+      const saved = await waitForFile(dl, /\.rootnote\.json$/, 300000);
+      assert.ok(await b.waitFor("/a different project is open now/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
+      const f = JSON.parse(readFileSync(saved, 'utf8'));
+      assert.equal(createHash('sha256').update(JSON.stringify({ ...f, savedAt: '', appVersion: '' })).digest('hex'), expected, 'the file is the project at the click');
+      assert.equal(await b.evaluate(`${snap}.savedAt === ${JSON.stringify(f.savedAt)}`), false, 'the opened project is not marked as that save');
+    });
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {
     await b.close();
