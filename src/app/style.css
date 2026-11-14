@@ -110,6 +110,9 @@ a.menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1p
 .warnings li { margin-bottom: 6px; }
 dialog.confirm { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--fg); max-width: 440px; box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
 dialog.confirm::backdrop { background: rgb(0 0 0 / .4); }
+dialog.confirm .move-where { border: 1px solid var(--line); border-radius: var(--radius); margin: 10px 0; padding: 6px 10px 8px; }
+dialog.confirm .move-where .check { display: flex; margin: 4px 0; }
+dialog.confirm select { max-width: 100%; }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; padding: 16px; }
   .nav { position: static; max-height: none; }
