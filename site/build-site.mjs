@@ -169,7 +169,7 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
 
 <section class="split">
   <div><h2>Online or offline: the same file</h2>
-    <p><strong>Online</strong>, the page at <code>/app/</code> is byte-for-byte the file in the download, served alone with no analytics or outside scripts. Your report content is processed in your browser; nothing is uploaded and there is no report database. The web host records ordinary visit details (such as IP address and browser), never report content.</p>
+    <p><strong>Online</strong>, the page at <code>/app/</code> is byte-for-byte the file in the download, served alone with no analytics or outside scripts. Your report content is processed in your browser; nothing is uploaded, and there is no hosted report database. The web host records ordinary visit details (such as IP address and browser), never report content.</p>
     <p><strong>Offline</strong>, unzip the download, check its SHA-256 against this page, and open <code>rootnote.html</code>. It works with the network unplugged.</p>
     <p>Check it yourself: open your browser's developer tools, Network tab, and use the app.</p></div>
   <div><h2>Limits, honestly</h2><ul>
