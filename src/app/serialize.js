@@ -15,12 +15,14 @@ const plainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray
 /**
  * Splits `project` (a plain object with an `images` array of plain objects) into string parts
  * whose concatenation equals JSON.stringify(project), with each plain data URL as one part.
- * Returns { parts, bytes } where bytes is the exact UTF-8 length, or null when the project
- * is not in that shape (the caller then serializes it whole).
+ * Returns { parts, bytes, data } where bytes is the exact UTF-8 length and data lists which
+ * parts are data URLs ({ part, image } indexes), or null when the project is not in that
+ * shape (the caller then serializes it whole).
  */
 export function projectParts(project) {
   if (!plainObject(project) || !Array.isArray(project.images) || !project.images.every(plainObject)) return null;
   const parts = [];
+  const data = [];
   let text = '';
   let bytes = 0;
   const flush = () => { if (text) { parts.push(text); bytes += utf8.encode(text).length; text = ''; } };
@@ -37,6 +39,7 @@ export function projectParts(project) {
         if (k === 'dataUrl' && typeof v === 'string' && PLAIN_DATA_URL.test(v)) {
           text += '"';
           flush();
+          data.push({ part: parts.length, image: j });
           parts.push(v);
           bytes += v.length; // ASCII
           text += '"';
@@ -50,7 +53,16 @@ export function projectParts(project) {
   });
   text += '}';
   flush();
-  return { parts, bytes };
+  return { parts, bytes, data };
+}
+
+/** A fresh project object from projectParts output: the text around the screenshots is
+ * parsed (small), and each data URL is the same string as in the parts. */
+export function partsToProject({ parts, data = [] }) {
+  const isData = new Set(data.map((d) => d.part));
+  const project = JSON.parse(parts.map((p, i) => (isData.has(i) ? '' : p)).join(''));
+  for (const d of data) project.images[d.image].dataUrl = parts[d.part];
+  return project;
 }
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));

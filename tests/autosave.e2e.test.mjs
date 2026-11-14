@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
@@ -14,14 +14,18 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dist = here('../dist/rootnote.html');
 const fixture = here('./fixtures/small.json');
 const snap = 'window.__fieldnote.snapshot()';
-const IDB = (op) => `new Promise((resolve, reject) => {
-  const r = indexedDB.open('fieldnote-recovery', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+// Database version 2 (src/editor/draft.js): a version-1 opener, like a 0.3.0 tab, is refused.
+const IDB = (op, version = 2) => `new Promise((resolve, reject) => {
+  const r = indexedDB.open('fieldnote-recovery', ${version});
+  r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
   r.onsuccess = () => { const db = r.result; const tx = db.transaction('kv', 'readwrite'); const s = tx.objectStore('kv'); let out;
     (${op})(s, (v) => { out = v; }); tx.oncomplete = () => { db.close(); resolve(out); }; tx.onabort = () => reject(tx.error); };
   r.onerror = () => reject(r.error);
 })`;
-const readStore = IDB(`(s, done) => { const m = s.get('meta'); const d = s.get('draft'); d.onsuccess = () => done({ meta: m.result ?? null, draft: d.result ? JSON.parse(d.result.json).project.title : null }); }`);
+// The stored draft's title: a Blob record (format 2) or a 0.3.0 string record.
+const readStore = `${IDB(`(s, done) => { const m = s.get('meta'); const d = s.get('draft'); d.onsuccess = () => done({ meta: m.result ?? null, draft: d.result ?? null }); }`)}.then(async (r) => ({
+  meta: r.meta, record: r.draft && { format: r.draft.format, rev: r.draft.rev, blob: r.draft.blob instanceof Blob, json: typeof r.draft.json },
+  draft: r.draft ? JSON.parse(typeof r.draft.json === 'string' ? r.draft.json : await r.draft.blob.text()).project.title : null }))`;
 const GATE = `(() => { window.pendingDecodes = []; const o = window.createImageBitmap; window.createImageBitmap = async (...a) => { const b = await o(...a); if (!window.releaseAll) await new Promise((r) => window.pendingDecodes.push(r)); return b; }; })()`;
 const type = (sel, v) => `(() => { const i = document.querySelector('${sel}'); i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`;
 const nav = (label) => `[...document.querySelectorAll('.navitem')].find((e) => e.textContent.trim().startsWith(${JSON.stringify(label)})).click()`;
@@ -191,6 +195,48 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`opt-in
       await b.evaluate('window.releaseAll = true; window.pendingDecodes.splice(0).forEach((f) => f())');
       await sleep(800);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=draft-banner]').hidden"), true, 'no stale offer');
+    });
+
+    await t.test('a draft is stored as a Blob record with its own revision', async () => {
+      await fresh();
+      if (!await b.evaluate("document.querySelector('[data-testid=draft-banner]').hidden")) {
+        await b.evaluate("document.querySelector('[data-testid=draft-discard]').click()");
+        assert.ok(await b.waitFor("document.querySelector('[data-testid=draft-banner]').hidden"));
+      }
+      await b.evaluate(nav('Check'));
+      if (!await b.evaluate("document.querySelector('[data-testid=draft-toggle]').checked")) await b.evaluate("document.querySelector('[data-testid=draft-toggle]').click()");
+      assert.ok(await b.waitFor(`${readStore}.then((s) => s.meta?.enabled === true)`));
+      await b.evaluate(nav('Details & cover'));
+      await b.evaluate(type('[data-testid=title]', 'Blob draft one'));
+      assert.ok(await waitDraft('Blob draft one'));
+      const first = (await b.evaluate(readStore)).record;
+      assert.equal(first.format, 2);
+      assert.equal(first.blob, true);
+      assert.equal(typeof first.rev, 'string');
+      await b.evaluate(type('[data-testid=title]', 'Blob draft two'));
+      assert.ok(await waitDraft('Blob draft two'));
+      assert.notEqual((await b.evaluate(readStore)).record.rev, first.rev, 'a new revision per draft');
+    });
+
+    await t.test('a tab of the previous version cannot open the draft store, and the draft stays', async () => {
+      const before = (await b.evaluate(readStore)).record.rev;
+      assert.equal(await b.evaluate(`${IDB('(s, done) => done()', 1)}.then(() => 'opened', (e) => e.name)`), 'VersionError');
+      assert.equal((await b.evaluate(readStore)).record.rev, before);
+    });
+
+    await t.test('a draft stored by the previous version (as text) is still offered and restored', async () => {
+      const old = JSON.parse(readFileSync(fixture, 'utf8'));
+      old.project.title = 'Draft from the previous version';
+      const json = JSON.stringify(old);
+      await b.evaluate(IDB(`(s, done) => { const m = s.get('meta'); m.onsuccess = () => { s.put({ savedAt: new Date().toISOString(), appVersion: '0.3.0', bytes: ${json.length}, json: ${JSON.stringify(json)}, epoch: m.result.epoch }, 'draft'); done(); }; }`));
+      await fresh();
+      // An earlier step's init script holds screenshot decodes on every page: let them run.
+      await b.evaluate('window.releaseAll = true; (window.pendingDecodes || []).splice(0).forEach((f) => f())');
+      assert.ok(await b.waitFor("!document.querySelector('[data-testid=draft-banner]').hidden"), 'offered');
+      await b.evaluate("document.querySelector('[data-testid=draft-restore]').click()");
+      assert.ok(await b.waitFor("/Restored the recovery draft/.test(document.querySelector('.status').textContent)", 30000), await b.evaluate("document.querySelector('.status').textContent"));
+      assert.equal(await b.evaluate(`${snap}.project.title`), 'Draft from the previous version');
+      assert.equal(await b.evaluate(`${snap}.findings.length`), 3);
     });
 
     await t.test('if deleting the draft fails, messages never claim the browser holds nothing', async () => {

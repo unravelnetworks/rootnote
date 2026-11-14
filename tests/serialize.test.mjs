@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { projectParts, partsToBlob } from '../src/app/serialize.js';
+import { projectParts, partsToBlob, partsToProject } from '../src/app/serialize.js';
 
 const read = (p) => JSON.parse(readFileSync(new URL(`../release-template/${p}`, import.meta.url), 'utf8'));
 const same = async (project, label) => {
@@ -14,6 +14,7 @@ const same = async (project, label) => {
   const blob = await partsToBlob(r.parts, { step: 1000 });
   assert.equal(blob.size, want.length, `${label}: blob size`);
   assert.ok(Buffer.from(await blob.arrayBuffer()).equals(want), `${label}: bytes differ`);
+  assert.deepEqual(partsToProject(r), JSON.parse(JSON.stringify(project)), `${label}: parsed back`);
   return r;
 };
 

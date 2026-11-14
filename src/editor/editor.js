@@ -5,7 +5,7 @@
 // captured earlier: it re-reads the current project when it commits, and `generation`
 // (bumped by New/Open) and `revision` (bumped by every edit) detect changes meanwhile.
 import {
-  createEmptyProject, openProjectFile, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
+  createEmptyProject, openProjectFile, openProjectData, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
   findingId, imageId, resolveFindingPrefix, defaultFormats, screenshotRefs, textBlock, imageBlock, detailsTextLength,
   LIMITS, megabytes, SEVERITIES, SCORING_MODES, LABEL_KEYS_V6, projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED,
   CUSTOM_LIMITS, customKey, newCustomSectionId, cweErrors, capUnits,
@@ -27,8 +27,8 @@ import { reportMarkdown } from '../app/report-markdown.js';
 import { defaultRatingMethodText } from '../app/rating-method.js';
 import { ratingBadge, cvssBadge } from '../export-docx/design.js';
 import { renderPreview } from './preview.js';
-import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft } from './draft.js';
-import { projectParts, partsToBlob } from '../app/serialize.js';
+import { readDraftState, enableDrafts, disableDrafts, writeDraft, discardDraft, draftText, sameDraft } from './draft.js';
+import { projectParts, partsToBlob, partsToProject } from '../app/serialize.js';
 
 const DECODE_BATCH = 4;
 const CVSS_METRICS = [
@@ -3008,13 +3008,19 @@ Third-party software notices
     const rev = revision;
     if (file.size > LIMITS.fileBytes) { say(`"${file.name}" is over the ${CAP} project limit. Your current work is unchanged.`, 'error'); return; }
     say(`Checking "${file.name}"…`);
-    const bytes = await readFileBytes(file);
-    let raw;
-    try {
-      raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-      say(`"${file.name}" is not a UTF-8 text file. Your current work is unchanged.`, 'error');
-      return;
+    // The browser decodes the text without holding the page. It replaces invalid UTF-8 with
+    // U+FFFD, so a text holding U+FFFD is decoded again strictly: invalid UTF-8 is refused,
+    // a real U+FFFD is kept.
+    let bytes = null;
+    let raw = await file.text();
+    if (raw.includes('\uFFFD')) {
+      bytes = await readFileBytes(file);
+      try {
+        raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        say(`"${file.name}" is not a UTF-8 text file. Your current work is unchanged.`, 'error');
+        return;
+      }
     }
     // Large projects take a while to check: say how far it is, at most a few times a second.
     let shown = 0;
@@ -3024,7 +3030,8 @@ Third-party software notices
       shown = performance.now();
       say(`Checking "${file.name}": screenshot ${n} of ${total}…`);
     };
-    const result = await openProjectFile(raw, bytes.length, { appVersion, decodeImage: decodeImageInBrowser, onProgress });
+    const proofs = new Map();
+    const result = await openProjectFile(raw, file.size, { appVersion, decodeImage: decodeImageInBrowser, onProgress, proofs });
     if (result.ok && result.project.findings.length > maxFindings) {
       say(`"${file.name}" has ${result.project.findings.length} findings; this ${edition ? edition.toLowerCase() + ' ' : ''}build opens projects with up to ${maxFindings}. Your current work is unchanged.`, 'error');
       return;
@@ -3049,7 +3056,11 @@ Third-party software notices
       // The answer covers the project as it was when asked.
       if (gen !== generation || asked !== revision) { say(`"${file.name}" was not opened: the project changed again meanwhile. Your current work is unchanged.`, 'error'); return; }
     }
+    // A converted project over the limit keeps the original file's bytes for Download original.
+    if (result.overBudgetBytes > 0 && !bytes) bytes = await readFileBytes(file);
+    if (gen !== generation) return;
     replaceProject(result.project, result.overBudgetBytes > 0 ? { name: file.name, bytes } : null, { converted: !!result.migratedFrom });
+    adoptProofs(proofs);
     if (!result.migratedFrom && !(result.overBudgetBytes > 0)) { fileInfo = { kind: 'opened', at: new Date() }; renderFileState(); }
     const counts = `${doc.findings.length} findings, ${evidenceCount()} screenshots`;
     // Screenshots that still carried hidden data were cleaned on open; saving keeps the clean copy.
@@ -3075,6 +3086,16 @@ Third-party software notices
     if (draftDecoded.gen !== generation || draftDecoded.map.size > 2 * LIMITS.images) draftDecoded = { gen: generation, map: new Map() };
     return draftDecoded.map;
   };
+  // Screenshots checked completely in this session (opened, restored or by a draft check), for
+  // this project only (see openProjectData). The draft check does not check them again while
+  // their data and attributes are unchanged; only the project's own screenshots are kept.
+  let proofState = { gen: -1, map: new Map() };
+  const sessionProofs = () => {
+    if (proofState.gen !== generation) proofState = { gen: generation, map: new Map() };
+    return proofState.map;
+  };
+  const adoptProofs = (map) => { proofState = { gen: generation, map }; };
+  const newDraftRev = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
   // Independent review F3: on a file:// page every local HTML file shares this storage.
   const DRAFT_DISCLOSURE = 'Keep an unencrypted recovery draft in this browser profile. It includes screenshots. Because the app runs from a file on your disk, any other web page or HTML file you open from this computer\'s disk in this browser can read or replace the draft, and anyone with access to this profile may be able to read it. Leave it off if you open HTML files from targets or tools in this browser. Save a project file for your own backup. Turning this off deletes the draft and reports whether that worked.';
   const draftState = { supported: true, enabled: false, epoch: 0, pending: null, timer: null, sessionOff: false, keptAt: null, busy: false, maybeStored: false };
@@ -3113,14 +3134,24 @@ Third-party software notices
     try {
       // Inside the try: a large project can fail to serialize (memory); that pauses drafts with
       // the same message as a failed write, and the last kept draft stays.
-      const json = serialize(new Date().toISOString());
-      const bytes = new TextEncoder().encode(json).length;
-      // A draft is stored only if it would open in this app as it is.
-      // Screenshots this session already decoded are not decoded again (decodedForDrafts).
-      const check = await openProjectFile(json, bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts() });
+      const savedAt = new Date().toISOString();
+      const file = snapshotFile(savedAt);
+      if (file.bytes > LIMITS.fileBytes) return;
+      // A draft is stored only if it would open in this app as it is. The check reads the
+      // snapshot taken above, not the live project. Screenshots already checked completely in
+      // this session, with the same data and attributes, are not checked again; this session's
+      // decoded screenshots are not decoded again (decodedForDrafts).
+      const proofs = sessionProofs();
+      const check = await openProjectData(partsToProject(file), file.bytes, { appVersion, decodeImage: decodeImageInBrowser, decodedImages: decodedForDrafts(), proofs, useProofs: true });
       if (!check.ok || check.overBudgetBytes > 0 || check.migratedFrom !== null) return;
-      if (gen !== generation || rev !== revision || epoch !== draftState.epoch || !draftWanted()) return; // newer state follows
-      const result = await writeDraft(epoch, { savedAt: new Date().toISOString(), appVersion, bytes, json });
+      const current = () => gen === generation && rev === revision && epoch === draftState.epoch && draftWanted();
+      if (!current()) return; // newer state follows
+      const keep = new Set(check.project.images.map((im) => im.dataUrl));
+      for (const key of proofs.keys()) if (!keep.has(key)) proofs.delete(key);
+      const blob = await partsToBlob(file.parts, { isCurrent: current });
+      if (!blob) return;
+      if (blob.size !== file.bytes) throw new Error('the draft could not be prepared');
+      const result = await writeDraft(epoch, { format: 2, rev: newDraftRev(), savedAt, appVersion, bytes: file.bytes, blob });
       if (result === 'stale') { // turned off or re-enabled in another tab
         draftState.enabled = false;
         say('Recovery drafts were turned off in another tab. Nothing more is kept in this browser.');
@@ -3210,7 +3241,13 @@ Third-party software notices
     const rev = revision;
     const epoch = draftState.epoch;
     say('Checking the recovery draft…');
-    const result = await openProjectFile(draft.json, new TextEncoder().encode(draft.json).length, { appVersion, decodeImage: decodeImageInBrowser });
+    let stored;
+    try { stored = await draftText(draft, LIMITS.fileBytes); } catch (err) {
+      say(`The recovery draft cannot be opened (${err?.message || 'storage error'}). It is still stored; discard it to remove it.`, 'error');
+      return;
+    }
+    const proofs = new Map();
+    const result = await openProjectFile(stored.text, stored.bytes, { appVersion, decodeImage: decodeImageInBrowser, proofs });
     if (!result.ok || result.overBudgetBytes > 0) {
       say(`The recovery draft cannot be opened (${(result.errors || [`over the ${CAP} limit`]).slice(0, 2).join(' · ')}). It is still stored; discard it to remove it.`, 'error');
       return;
@@ -3226,7 +3263,7 @@ Third-party software notices
     // Turned off, discarded or replaced (here or in another tab) while checking.
     let now;
     try { now = await readDraftState(); } catch { now = null; }
-    if (draftState.pending !== draft || !draftState.enabled || epoch !== draftState.epoch || !now?.enabled || now.epoch !== epoch || !now.draft || now.draft.json !== draft.json) {
+    if (draftState.pending !== draft || !draftState.enabled || epoch !== draftState.epoch || !now?.enabled || now.epoch !== epoch || !sameDraft(now.draft, draft)) {
       if (draftState.pending === draft) { draftState.pending = null; draftBanner.hidden = true; showDraftNote(); }
       say('The draft was not restored: recovery drafts were changed or turned off meanwhile.', 'error');
       return;
@@ -3236,6 +3273,7 @@ Third-party software notices
       return;
     }
     replaceProject(result.project);
+    adoptProofs(proofs);
     draftState.pending = null;
     draftBanner.hidden = true;
     markDirty(); // a draft is not a saved file
@@ -3265,13 +3303,17 @@ Third-party software notices
     if (state.enabled && state.draft && !dirty && revision === 0) {
       const d = state.draft;
       const gen = generation;
-      const check = await openProjectFile(d.json, new TextEncoder().encode(d.json).length, { appVersion, decodeImage: decodeImageInBrowser });
+      let check = { ok: false };
+      try {
+        const stored = await draftText(d, LIMITS.fileBytes);
+        check = await openProjectFile(stored.text, stored.bytes, { appVersion, decodeImage: decodeImageInBrowser });
+      } catch { /* unreadable or unknown: not offered, and left as it is */ }
       // Offer only if nothing changed meanwhile, here or in another tab: still on, same
       // epoch and the same draft in the store, same clean project.
       let now = null;
       if (check.ok && check.overBudgetBytes === 0) { try { now = await readDraftState(); } catch { now = null; } }
       if (now && revision === 0 && gen === generation && !draftState.pending && draftState.enabled && draftState.epoch === state.epoch &&
-          now.enabled && now.epoch === state.epoch && now.draft?.json === d.json) offerDraft(d, check.project.findings.length);
+          now.enabled && now.epoch === state.epoch && sameDraft(now.draft, d)) offerDraft(d, check.project.findings.length);
       else if (now && !now.enabled) draftState.enabled = false;
     }
     showDraftNote();
