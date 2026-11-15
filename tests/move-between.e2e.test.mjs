@@ -175,12 +175,12 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
       // gallery (F-003) -> details (F-001): a new wrapper block
       await b.evaluate(nav(f3.title.slice(0, 20)));
       assert.ok(await b.waitFor(`!!document.querySelector('[data-section=evidence] [data-image="${id}"]')`));
+      const beforeWrap = await b.evaluate(snap);
       await move(`[data-section=evidence] [data-image="${id}"]`, f1.id, 'details');
       s = await b.evaluate(snap);
       const wrap = s.findings[0].details.at(-1);
       await undo(); // the new wrapper goes again
-      assert.equal((await b.evaluate(snap)).findings[0].details.some((x) => x.imageId === id), false);
-      assert.equal((await b.evaluate(snap)).findings[2].evidence.at(-1), id);
+      assert.deepEqual(await b.evaluate(snap), beforeWrap, 'exact Undo (gallery to details)');
       await b.evaluate(nav(f3.title.slice(0, 20)));
       assert.ok(await b.waitFor(`!!document.querySelector('[data-section=evidence] [data-image="${id}"]')`));
       await move(`[data-section=evidence] [data-image="${id}"]`, f1.id, 'details');
