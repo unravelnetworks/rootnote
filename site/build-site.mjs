@@ -152,10 +152,10 @@ await writeFile(out + 'index.html', page('/', 'Rootnote: screenshots and notes t
 
 <section class="grid" aria-label="What it does">
   <div><h2>Write the findings</h2><ul>
-    <li>Paste screenshots (Win+Shift+S, Ctrl+V) or drop PNG/JPEG between the steps.</li>
+    <li>Paste screenshots (Win+Shift+S, Ctrl+V) or drop PNG/JPEG between the steps, and move them to another finding later.</li>
     <li>Black out, pixelate, box, arrow and crop without leaving the app. Blacked-out pixels are gone from the saved file.</li>
     <li>Rating, CVSS 3.1 and 4.0 Base calculators, status, type, CWE, affected assets and references.</li>
-    <li>12 OWASP-referenced starter findings, plus your own finding library.</li></ul></div>
+    <li>12 OWASP-referenced starter findings, plus your own finding library. Reused entries can fill in the client and application names, with a preview.</li></ul></div>
   <div><h2>Get the report out</h2><ul>
     <li>Real Word styles, table of contents, numbered figures, a linked findings summary; A4 or Letter.</li>
     <li>Your sections, order and names, up to 10 of your own; score by severity, risk or CVSS.</li>
