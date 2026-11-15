@@ -71,7 +71,7 @@ Write `{client}` and `{application}` in a library entry where the names belong, 
 
 The starter finding **01 - Object-level authorization bypass** uses `{client}` in its impact, as a worked example.
 
-When you choose **Add to report**, Rootnote asks for the names. **Client** starts with the client from **Details & cover**; **Application** starts with the last name you used in this report. The preview shows every place that changes. Leave a box empty to leave `{client}` or `{application}` in the text: **Check & export** then lists it, but it does not stop the export. The library entry itself is not changed.
+When an entry contains them and you choose **Add to report**, Rootnote asks for the names. **Client** starts with the client from **Details & cover**; **Application** starts with the last name you used in this report. The preview shows every place that changes. Leave a box empty to leave `{client}` or `{application}` in the text: **Check & export** then lists it, but it does not stop the export. The library entry itself is not changed.
 
 Only those two exact names are filled, and never inside double braces, so a payload such as `{{client}}` stays as it is. Reference addresses are not filled.
 
