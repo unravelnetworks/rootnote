@@ -88,7 +88,7 @@ for (const [engine, port] of [['chrome', 9587], ['firefox', 9687]]) test(`engage
       await b.evaluate("[...document.querySelectorAll('.navitem')].find((e) => e.textContent.includes('Check')).click()");
       assert.match(await b.evaluate("document.querySelector('[data-testid=export-target]').textContent"), /Brightwater Logistics › 2026-10 Customer portal/);
       const passed = await b.evaluate("document.querySelector('[data-testid=checks-passed]').textContent");
-      assert.match(passed, /^Passed: every fill-in field is filled · no example text left · every screenshot has a caption · table of contents included$/);
+      assert.match(passed, /^Passed: every fill-in field is filled · no example text left \(TODO, TBD, lorem ipsum, \[insert …\]\) · every screenshot has a caption · table of contents included$/);
       assert.equal(await b.evaluate("document.querySelector('[data-testid=export]').textContent"), 'Save Word report', 'no "…": no dialog opens');
       // Scrolled to the bottom, a new message still shows, pinned under the header, with the nav below it.
       // A desktop width: below 760 px the nav is part of the page by design (Edge opens at 754 px).

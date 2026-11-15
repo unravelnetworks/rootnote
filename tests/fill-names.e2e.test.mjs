@@ -8,11 +8,16 @@ import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { TEST_BUDGET_DIST, TEST_FILE_BYTES } from './harness/test-budget.mjs';
+import { noisyPng } from './harness/noisy-png.mjs';
 
 const require = createRequire(import.meta.url);
 const { launch, installed } = require('./harness/driver.cjs');
-const { createEmptyLibrary, entryFromFinding, serializeLibrary } = await import('../src/app/library.js');
-const { resolveFindingPrefix } = await import('../src/app/project.js');
+const { createEmptyLibrary, entryFromFinding, findingFromEntry, serializeLibrary } = await import('../src/app/library.js');
+const { resolveFindingPrefix, savedSize } = await import('../src/app/project.js');
+const { fillEntry } = await import('../src/app/name-tokens.js');
+const { APP_VERSION } = await import('../src/app/version.js');
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dist = here('../dist/rootnote.html');
@@ -219,6 +224,66 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`fill n
       assert.equal(await b.evaluate("document.querySelector('[data-testid=fill-application]').value"), '');
       await b.evaluate("[...document.querySelectorAll('dialog button')].find((x) => x.textContent === 'Cancel').click()");
     });
+    assert.deepEqual(b.errors, [], 'page errors');
+  } finally {
+    await b.close();
+  }
+});
+
+// Near the limit of the test-budget build: the finding made with a three-letter client name fits
+// with 5 bytes to spare; a longer name does not, and the dialog comes back with the typed names.
+for (const [engine, port] of [['chrome', 9598], ['firefox', 9698]]) test(`a filled finding that would go over the limit in ${engine}`, { skip: (!installed(engine) && `${engine} not installed`) || (!existsSync(TEST_BUDGET_DIST) && 'run node scripts/build-test-budget.mjs first'), timeout: 240000 }, async () => {
+  const doc = structuredClone(sample);
+  doc.project.executiveSummary = '';
+  const withFinding = (client) => {
+    const d = structuredClone(doc);
+    d.findings.push(findingFromEntry(fillEntry(withNames, { client, application: '' }), d.project.nextFindingNumber));
+    d.project.nextFindingNumber++;
+    return savedSize({ ...d, appVersion: APP_VERSION });
+  };
+  const record = (id, png) => ({ id, mime: 'image/png', dataUrl: `data:image/png;base64,${png.toString('base64')}`, width: png.readUInt32BE(16), height: png.readUInt32BE(20),
+    bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'), caption: 'Filler screenshot', tallMode: 'auto', originalName: `${id}.png` });
+  const target = TEST_FILE_BYTES - 5;
+  for (let n = 0; target - withFinding('Abc') > 2_600_000; n++) {
+    const id = `IMG-${8001 + n}`;
+    doc.images.push(record(id, noisyPng(800, 780)));
+    doc.findings[3].details.push({ id: `B-fill-${n}`, type: 'image', imageId: id });
+  }
+  doc.project.nextImageNumber = 9000;
+  let w = 600;
+  for (let tries = 0; tries < 600; tries++) {
+    doc.images = doc.images.filter((x) => x.id !== 'IMG-8999');
+    doc.findings[4].details = doc.findings[4].details.filter((x) => x.imageId !== 'IMG-8999');
+    doc.images.push(record('IMG-8999', noisyPng(w, 600)));
+    doc.findings[4].details.push({ id: 'B-fill-last', type: 'image', imageId: 'IMG-8999' });
+    const gap = target - withFinding('Abc');
+    if (gap >= 0 && gap < 19000) { doc.project.executiveSummary = 'x'.repeat(gap); break; }
+    w += gap < 0 ? -2 : Math.max(2, Math.floor(gap / 2400) * 2);
+  }
+  assert.equal(withFinding('Abc'), target);
+  const p = join(dir, `near-cap-${engine}.rootnote.json`);
+  writeFileSync(p, JSON.stringify(doc));
+  const b = await launch(engine, port);
+  const type = (sel, v) => b.evaluate(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  try {
+    await b.navigate(pathToFileURL(TEST_BUDGET_DIST).href);
+    assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
+    await b.setFile('[data-testid=open-input]', p);
+    assert.ok(await b.waitFor(`${snap}.images.some((im) => im.id === 'IMG-8999')`, 120000), await b.evaluate(status));
+    await b.evaluate(nav('Finding library'));
+    await b.setFile('[data-testid=library-input]', libPath);
+    assert.ok(await b.waitFor(`!!document.querySelector('[data-entry="${withNames.id}"] [data-testid=library-insert]')`, 30000));
+    await b.evaluate(`document.querySelector('[data-entry="${withNames.id}"] [data-testid=library-insert]').click()`);
+    assert.ok(await b.waitFor("!!document.querySelector('[data-testid=fill-add]')"));
+    await type('[data-testid=fill-client]', 'Abcdefgh');
+    await b.evaluate("document.querySelector('[data-testid=fill-add]').click()");
+    assert.ok(await b.waitFor("/would go over 25 MB/.test(document.querySelector('[data-testid=fill-problem]')?.textContent ?? '')", 10000), 'the dialog comes back with the reason');
+    assert.equal(await b.evaluate("document.querySelector('[data-testid=fill-client]').value"), 'Abcdefgh', 'typed name kept');
+    assert.equal((await b.evaluate(snap)).findings.length, 8, 'nothing added');
+    await type('[data-testid=fill-client]', 'Abc');
+    await b.evaluate("document.querySelector('[data-testid=fill-add]').click()");
+    assert.ok(await b.waitFor(`${snap}.findings.length === 9`, 10000), await b.evaluate(status));
+    assert.equal((await b.evaluate(snap)).findings[8].title, 'Customers of Abc can read invoices in {application}');
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {
     await b.close();

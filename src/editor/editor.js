@@ -2492,7 +2492,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   function sizeOk(e) {
     const f = findingFromEntry(e, doc.project.nextFindingNumber);
     doc.findings.push(f);
+    doc.project.nextFindingNumber++; // as the real insertion does (9 -> 10 is one byte more)
     const ok = fits();
+    doc.project.nextFindingNumber--;
     doc.findings.pop();
     return ok;
   }
@@ -2742,7 +2744,7 @@ ${e.title}`.toLowerCase().includes(q));
     const has = (re) => warnings.some((w) => re.test(w.text));
     const ok = [
       !has(/\[\[/) && !warnings.some((w) => w.kind === 'token') ? 'every fill-in field is filled' : null,
-      !has(/placeholder text/) ? 'no example text left' : null,
+      !has(/placeholder text/) ? 'no example text left (TODO, TBD, lorem ipsum, [insert …])' : null,
       !has(/no caption/) ? 'every screenshot has a caption' : null,
       doc.project.sections.report.find((x) => x.key === 'contents')?.enabled ? 'table of contents included' : null].filter(Boolean);
     if (!ok.length) return null;
