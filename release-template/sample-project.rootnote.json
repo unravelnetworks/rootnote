@@ -679,7 +679,7 @@
         "recommendation": "plain"
       },
       "evidence": [],
-      "status": "false_positive",
+      "status": "open",
       "cwe": "CWE-693",
       "vulnerabilityType": "Missing security headers",
       "references": [
