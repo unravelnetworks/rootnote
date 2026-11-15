@@ -63,6 +63,18 @@ The **Finding library** holds findings you want to use again. It is a separate f
 
 > **Warning:** Library entries keep their text exactly as written. Remove client names, hosts and other client details before you save a finding to the library.
 
+### Client and application names
+
+Write `{client}` and `{application}` in a library entry where the names belong, for example:
+
+> Customers of {client} can read other customers' invoices in {application}.
+
+When you choose **Add to report**, Rootnote asks for the names. **Client** starts with the client from **Details & cover**; **Application** starts with the last name you used in this report. The preview shows every place that changes. Leave a box empty to keep that name as written: **Check & export** then lists it, but it does not stop the export. The library entry itself is not changed.
+
+Only those two exact names are filled, and never inside double braces, so a payload such as `{{client}}` stays as it is. Reference addresses are not filled.
+
+When you save a finding to the library, Rootnote can put `{client}` into the entry where the client's name appears in its text. It replaces only the places you tick, and only exact matches of that one name. Your finding is not changed. Check the entry before you reuse it: other client details may still be in there.
+
 ## Copy a finding as text
 
 **Copy as text** in a finding's **⋯** menu shows the whole finding as plain text, ready to copy into an email or a ticket.

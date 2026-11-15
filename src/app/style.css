@@ -759,3 +759,10 @@ dialog.redact::backdrop { background: rgb(0 0 0 / .45); }
   .pv-fit > .pv-page { transform: none !important; }
   .nav-toggle, .phone-note, .pv-zoom { display: none !important; }
 }
+dialog.fill-dialog { max-width: min(640px, 92vw); }
+dialog.fill-dialog .fill-preview { max-height: 40vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin: 8px 0; }
+dialog.fill-dialog .fill-field p, dialog.fill-dialog .fill-field pre { margin: 2px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+dialog.fill-dialog .fill-field pre { font: 12px/1.45 Consolas, monospace; }
+dialog.fill-dialog .reverse-list { max-height: 40vh; overflow: auto; margin: 8px 0; }
+dialog.fill-dialog .reverse-row { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; overflow-wrap: anywhere; }
+dialog.fill-dialog .reverse-row .mono { font-family: Consolas, monospace; font-size: 12px; }

@@ -4,9 +4,23 @@
 // or a finding id.
 import { resolveFindingPrefix, screenshotRefs } from '../app/project.js';
 import { countPrompts } from '../app/starter-library.js';
+import { tokensIn } from '../app/name-tokens.js';
 import { cvssVersion, reportCvssVersion, staleCvssLabel } from '../scoring/index.js';
 
 const PLACEHOLDER = /\b(TODO|TBD|FIXME|lorem ipsum|XXX)\b|\[(insert|placeholder)[^\]]*\]/i;
+
+/** Unfilled {client} / {application}: one warning per area, naming the fields. `fields` is a
+ * list of [field name, text]. Hidden sections count too: they can be shown later. */
+function tokenWarning(warnings, where, go, fields) {
+  const at = { client: [], application: [] };
+  for (const [name, text] of fields) {
+    const n = tokensIn(text);
+    for (const t of ['client', 'application']) if (n[t] && !at[t].includes(name)) at[t].push(name);
+  }
+  const and = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0]);
+  const parts = ['client', 'application'].filter((t) => at[t].length).map((t) => `{${t}} in ${and(at[t])}`);
+  if (parts.length) warnings.push({ where, go, kind: 'token', text: `Unfilled ${parts.join('; ')}. Replace ${parts.length > 1 || at.client.length + at.application.length > 1 ? 'each' : 'it'} with the name, or delete it.` });
+}
 
 export function checklist(doc) {
   const warnings = [];
@@ -28,6 +42,12 @@ export function checklist(doc) {
     const n = countPrompts(value);
     if (n) warnings.push({ where, go, text: `${n} unfilled [[…]] prompt${n > 1 ? 's' : ''}: replace ${n > 1 ? 'each' : 'it'} with what you observed, or delete ${n > 1 ? 'them' : 'it'}.` });
   };
+  const sectionLabels = [...p.sections.report, ...p.sections.finding].map((x) => ['Section names', x.label]);
+  tokenWarning(warnings, 'Details & cover', 'details', [['Report title', p.title], ['Subtitle', p.subtitle], ['Client', p.client], ['Scope', p.scope],
+    ['Executive summary', p.executiveSummary], ['Rating method', p.ratingMethod?.text],
+    ...(p.customSections ?? []).flatMap((c) => [['Custom sections', c.title], ['Custom sections', c.text]]),
+    ...p.engagement.rows.flatMap((r) => [['Engagement details', r.label], ['Engagement details', r.value]]),
+    ...Object.values(p.labels ?? {}).map((v) => ['Labels', v]), ...sectionLabels]);
   scan('Details & cover', 'details', [p.title, p.subtitle, p.client, p.scope, p.executiveSummary, p.ratingMethod?.text,
     ...(p.customSections ?? []).flatMap((c) => [c.title, c.text]),
     ...p.engagement.rows.map((r) => `${r.label}\n${r.value || ''}`)].join('\n'));
@@ -69,6 +89,9 @@ export function checklist(doc) {
     }
     const detailsText = (f.details || []).filter((b) => b.type === 'text').map((b) => b.text);
     const references = f.references || [];
+    tokenWarning(warnings, where, f.id, [['Title', f.title], ...(f.affectedAssets || []).map((a) => [label('assets'), a]),
+      ...['description', 'impact', 'threat', 'recommendation'].map((k) => [label(k), f[k]]), ...detailsText.map((t) => [label('details'), t]),
+      ...refs.map((r) => ['captions', images.get(r.imageId)?.caption]), ...references.flatMap((r) => [[label('references'), r.title], [label('references'), r.url]])]);
     scan(where, f.id, [f.title, f.vulnerabilityType ?? '', ...(f.affectedAssets || []), f.description, ...detailsText, f.impact, f.threat, f.recommendation, ...refs.map((r) => images.get(r.imageId)?.caption),
       ...references.flatMap((r) => [r.title, r.url])].join('\n'));
     // Duplicates are allowed (rule 18) but are usually a slip.
