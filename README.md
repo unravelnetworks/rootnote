@@ -6,7 +6,7 @@ Rootnote is a free, open-source pentest report writer. Organise findings and scr
 
 - Use it online, or download it: https://rootnote.unravelnetworks.com (also attached to each [GitHub release](https://github.com/unravelnetworks/rootnote/releases))
 - Step-by-step guide: https://rootnote.unravelnetworks.com/guide/
-- Short demo video (an edited walkthrough of the fictional sample): https://youtu.be/AHG4aabI8Lw
+- Demo video (an edited walkthrough of the fictional sample): https://youtu.be/IXkaaV7fJSE
 - How it compares with other pentest reporting tools: https://rootnote.unravelnetworks.com/alternatives/
 - Licence: [Apache-2.0](LICENSE). Third-party components keep their own licences; see [THIRD-PARTY-NOTICES](release-template/THIRD-PARTY-NOTICES.md).
 
