@@ -14,6 +14,7 @@ import {
 import { h, icon, confirmDialog, choiceDialog, textDialog, downloadBytes, readFileBytes, setRuntimeStyle } from './dom.js';
 import { createEmptyLibrary, openLibraryFile, checkLibrary, serializeLibrary, entryFromFinding, findingFromEntry, mergeLibraries, capEntryName, LIBRARY_LIMITS, LIBRARY_VERSION } from '../app/library.js';
 import { STARTER_LIBRARY, countPrompts } from '../app/starter-library.js';
+import { countNameTokens, fillEntry, nameFields, findName, defaultTicks, replaceMatches, REVERSE_MAX } from '../app/name-tokens.js';
 import { importImageBytes, imageFilesFrom, imageTooLarge } from './images.js';
 import { editImage } from './redact.js';
 import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem } from './engagements.js';
@@ -2358,7 +2359,45 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     dialog.showModal();
   }
 
+  /** Lists each place the client's name appears in the new library entry, with context and a
+   * checkbox; resolves the ticks, or null (Cancel). The finding itself is never changed. */
+  function reverseDialog(entry, client, found) {
+    const { matches } = found;
+    const start = defaultTicks(found);
+    const boxes = matches.map((m, i) => h('input', { type: 'checkbox', checked: start[i], 'data-testid': 'reverse-match' }));
+    const fields = nameFields(entry);
+    const rows = matches.map((m, i) => h('label', { class: 'reverse-row' }, boxes[i],
+      h('span', {}, h('strong', {}, fieldName(fields.find((f) => f.key === m.key))), ' ',
+        h('span', {}, `${m.before.length >= 80 ? '…' : ''}${m.before}`, h('mark', {}, client), `${m.after}${m.after.length >= 80 ? '…' : ''}`))));
+    const keep = h('button', { type: 'button', class: 'secondary', 'data-testid': 'reverse-keep', onclick: () => boxes.forEach((b) => { b.checked = false; }) }, 'Keep as written');
+    const form = h('form', { method: 'dialog' },
+      h('h2', {}, `Save "${entry.name}" to the library`),
+      h('p', {}, `${client} appears in this finding. Tick the places to replace with {client} in the library entry. `, h('strong', {}, 'Your finding is not changed.')),
+      h('div', { class: 'reverse-list', 'data-testid': 'reverse-list' }, ...rows),
+      found.partial ? h('p', { class: 'hint', 'data-testid': 'reverse-partial' }, `${client} also appears inside longer words; those places are not offered, and nothing is ticked for you.`) : null,
+      found.more ? h('p', { class: 'hint', 'data-testid': 'reverse-more' }, `Only the first ${REVERSE_MAX} places are listed; ${found.more} more stay as written.`) : null,
+      h('p', { class: 'hint' }, 'Only the title and plain text are offered: code, affected assets and references stay as written.'),
+      h('div', { class: 'row' }, keep),
+      h('p', { class: 'hint' }, 'This replaces only the places you tick. It does not remove other client details from the entry.'),
+      h('div', { class: 'row end' }, h('button', { type: 'button', class: 'secondary', onclick: () => dialog.close('') }, 'Cancel'),
+        h('button', { type: 'submit', 'data-testid': 'reverse-save' }, 'Save to library')));
+    const dialog = h('dialog', { class: 'confirm fill-dialog', 'aria-label': `Save "${entry.name}" to the library` }, form);
+    form.addEventListener('submit', (e) => { e.preventDefault(); dialog.close('save'); });
+    return new Promise((resolve) => {
+      dialog.addEventListener('close', () => { const t = boxes.map((b) => b.checked); dialog.remove(); resolve(dialog.returnValue === 'save' ? t : null); });
+      document.body.append(dialog);
+      dialog.showModal();
+      boxes[0]?.focus();
+    });
+  }
+
   async function saveToLibrary(f) {
+    // Nothing is written if the report, the finding or the library changed during a question.
+    const gen = generation;
+    const rev = revision;
+    const lib = library;
+    const stale = () => gen !== generation || rev !== revision || lib !== library || findingById(f.id) !== f;
+    const STALE = 'Not saved to the library: the report or the library changed while the dialog was open.';
     const linked = libraryLinks.get(f.id);
     const existing = linked && library.entries.find((e) => e.id === linked);
     let id;
@@ -2366,19 +2405,126 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       const choice = await choiceDialog(`"${existing.name}" in the library came from this finding.`, [
         { value: 'replace', label: 'Replace that entry' }, { value: 'new', label: 'Save as a new entry' }]);
       if (!choice) return;
+      if (stale()) { say(STALE, 'error'); return; }
       if (choice === 'replace') id = existing.id;
     }
-    const { entry, droppedScreenshots } = entryFromFinding(f, id ? { id, name: existing.name } : {});
+    let { entry, droppedScreenshots } = entryFromFinding(f, id ? { id, name: existing.name } : {});
+    const client = (doc.project.client || '').trim();
+    const found = findName(entry, client);
+    if (found.matches.length) {
+      const ticked = await reverseDialog(entry, client, found);
+      if (!ticked) return;
+      if (stale()) { say(STALE, 'error'); return; }
+      entry = replaceMatches(entry, found.matches, ticked);
+    }
     const entries = id ? library.entries.map((e) => (e.id === id ? entry : e)) : [...library.entries, entry];
     const note = droppedScreenshots ? ` ${droppedScreenshots} screenshot${droppedScreenshots > 1 ? 's were' : ' was'} not saved: library entries hold text only.` : '';
     if (setLibrary({ ...library, entries }, `${id ? 'Replaced' : 'Saved'} "${entry.name}" in the finding library.${note} Save the library file to keep it.`)) libraryLinks.set(f.id, entry.id);
   }
 
-  function insertFromLibrary(entry) {
+  // The application name typed when adding a library entry: a convenience for this loaded report
+  // only (in memory, never saved), set after a successful filled insertion.
+  let applicationName = { gen: -1, value: '' };
+  const sectionName = (key) => sectionConfig('finding', { assets: 'assets', description: 'description', impact: 'impact', threat: 'threat', recommendation: 'recommendation' }[key] ?? key)?.label;
+  const fieldName = (f) => (f.kind === 'text' ? sectionName(f.key) : f.key.startsWith('details.') ? `${sectionName('details')} ${Number(f.key.split('.')[1]) + 1}`
+    : f.key.startsWith('affectedAssets.') ? `${sectionName('assets')} ${Number(f.key.split('.')[1]) + 1}` : f.key.startsWith('references.') ? `${sectionName('references')} ${Number(f.key.split('.')[1]) + 1} (title)` : 'Title');
+  /** Why a filled entry cannot become a finding (the same bounds the file is checked against), or null. */
+  function candidateProblem(e) {
+    for (const f of nameFields(e)) {
+      if (f.kind === 'line' && f.text.length > (f.key.startsWith('references.') ? REFERENCE_LIMITS.title : LIMITS.line)) return `${fieldName(f)} would be longer than ${f.key.startsWith('references.') ? REFERENCE_LIMITS.title : LIMITS.line} characters.`;
+      if (f.kind === 'text' && f.text.length > LIMITS.text) return `${fieldName(f)} would be longer than ${LIMITS.text} characters.`;
+    }
+    const details = (e.details ?? []).reduce((n, b) => n + b.text.length, 0);
+    if (details > LIMITS.text) return `${sectionName('details')} would be longer than ${LIMITS.text} characters in total.`;
+    const refs = (e.references ?? []).reduce((n, r) => n + r.title.length + r.url.length, 0);
+    if (refs > REFERENCE_LIMITS.units) return `${sectionName('references')} would be longer than ${REFERENCE_LIMITS.units} characters in total.`;
+    return null;
+  }
+  /** Asks for the names an entry uses; resolves the values or null (Cancel). Shows every field
+   * the names change, as plain text. */
+  function fillDialog(entry, used, start = null, refused = '') {
+    const input = (name, value) => h('input', { type: 'text', value, maxlength: LIMITS.line, 'data-testid': `fill-${name}`, spellcheck: 'false' });
+    const fields = { client: used.client ? input('client', start ? start.client : doc.project.client || '') : null,
+      application: used.application ? input('application', start ? start.application : applicationName.gen === generation ? applicationName.value : '') : null };
+    const preview = h('div', { class: 'fill-preview', 'data-testid': 'fill-preview', tabindex: '0', 'aria-label': 'Preview of the changed text' });
+    const counts = h('p', { class: 'hint', 'data-testid': 'fill-counts', 'aria-live': 'polite' });
+    const problem = h('p', { class: 'hint', 'data-kind': 'error', 'data-testid': 'fill-problem', 'aria-live': 'polite' });
+    const add = h('button', { type: 'submit', 'data-testid': 'fill-add' }, 'Add to report');
+    // Trimmed, otherwise exactly as typed; characters a report cannot hold are refused, not removed.
+    const values = () => ({ client: fields.client ? fields.client.value.trim() : '', application: fields.application ? fields.application.value.trim() : '' });
+    const unusable = (v) => ['client', 'application'].find((t) => v[t] && sanitizeLine(v[t]) !== v[t]);
+    const times = (n) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
+    const update = () => {
+      const v = values();
+      const filled = fillEntry(entry, v);
+      const before = nameFields(entry);
+      const changed = nameFields(filled).filter((f, i) => f.text !== before[i].text || /\{(client|application)\}/.test(before[i].text));
+      preview.replaceChildren(...changed.map((f) => h('div', { class: 'fill-field' }, h('strong', {}, fieldName(f)), h(f.code ? 'pre' : 'p', {}, f.text))));
+      const fills = ['client', 'application'].filter((t) => used[t] && v[t]).map((t) => `{${t}} ${times(used[t])}`);
+      const left = ['client', 'application'].filter((t) => used[t] && !v[t]).map((t) => `{${t}}`);
+      counts.textContent = `${fills.length ? `Fills ${fills.join(' and ')}.` : 'Nothing is filled.'}${left.length ? ` ${left.join(' and ')} ${left.length > 1 ? 'stay' : 'stays'} as written; Check & export will list ${left.length > 1 ? 'them' : 'it'}.` : ''}`;
+      const bad = unusable(v);
+      const why = bad ? `the ${bad} name contains a line break or a character a report cannot hold.` : candidateProblem(filled);
+      problem.textContent = why ? `Not added: ${why}${bad ? ' Remove it.' : ' Shorten the name.'}` : refused;
+      refused = '';
+      add.disabled = !!why;
+    };
+    const form = h('form', { method: 'dialog' },
+      h('h2', {}, `Add "${entry.name}" to the report`),
+      fields.client ? h('label', { class: 'field' }, h('span', {}, 'Client'), fields.client) : null,
+      fields.application ? h('label', { class: 'field' }, h('span', {}, 'Application'), fields.application) : null,
+      h('p', { class: 'hint' }, 'Leave a box empty to leave {client} or {application} in the text; Check & export then lists it. The library entry is not changed. Reference addresses are not filled.'),
+      counts, preview, problem,
+      h('div', { class: 'row end' }, h('button', { type: 'button', class: 'secondary', onclick: () => dialog.close('') }, 'Cancel'), add));
+    const dialog = h('dialog', { class: 'confirm fill-dialog', 'aria-label': `Add "${entry.name}" to the report` }, form);
+    for (const el of Object.values(fields)) el?.addEventListener('input', update);
+    form.addEventListener('submit', (e) => { e.preventDefault(); if (!add.disabled) dialog.close('add'); });
+    update();
+    return new Promise((resolve) => {
+      dialog.addEventListener('close', () => { const v = values(); dialog.remove(); resolve(dialog.returnValue === 'add' ? v : null); });
+      document.body.append(dialog);
+      dialog.showModal();
+      (fields.client || fields.application).focus();
+    });
+  }
+
+  /** Whether a finding made from `e` would fit the project (checked and undone, nothing kept). */
+  function sizeOk(e) {
+    const f = findingFromEntry(e, doc.project.nextFindingNumber);
+    doc.findings.push(f);
+    doc.project.nextFindingNumber++; // as the real insertion does (9 -> 10 is one byte more)
+    const ok = fits();
+    doc.project.nextFindingNumber--;
+    doc.findings.pop();
+    return ok;
+  }
+
+  async function insertFromLibrary(entry) {
     if (recovery) { say(`Findings cannot be added while the project is over the ${CAP} limit.`, 'error'); return; }
     if (doc.findings.length >= maxFindings) { say(`Not added: the limit is ${maxFindings} findings per project.`, 'error'); return; }
     if (!canIssueFinding()) { say('Not added: finding numbering is exhausted for this project.', 'error'); return; }
-    const f = findingFromEntry(entry, doc.project.nextFindingNumber);
+    const used = countNameTokens(entry);
+    let source = entry;
+    let values = null;
+    let refused = '';
+    for (;;) {
+      if (!(used.client || used.application)) break;
+      const gen = generation;
+      const rev = revision;
+      const lib = library;
+      values = await fillDialog(entry, used, values, refused);
+      if (!values) return;
+      if (gen !== generation || rev !== revision || (lib !== library && !STARTER_LIBRARY.entries.includes(entry))) { say('Not added: the report or the library changed while the dialog was open.', 'error'); return; }
+      if (recovery) { say(`Findings cannot be added while the project is over the ${CAP} limit.`, 'error'); return; }
+      if (doc.findings.length >= maxFindings) { say(`Not added: the limit is ${maxFindings} findings per project.`, 'error'); return; }
+      if (!canIssueFinding()) { say('Not added: finding numbering is exhausted for this project.', 'error'); return; }
+      source = fillEntry(entry, values);
+      const why = candidateProblem(source);
+      if (why) { refused = `Not added: ${why}`; continue; }
+      if (!sizeOk(source)) { refused = `Not added: the report would go over ${CAP}. Shorten the names, or remove something from the report first.`; continue; }
+      break;
+    }
+    const f = findingFromEntry(source, doc.project.nextFindingNumber);
     doc.findings.push(f);
     doc.project.nextFindingNumber++;
     if (!fits()) {
@@ -2388,10 +2534,15 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       return;
     }
     libraryLinks.set(f.id, entry.id);
+    if (values?.application) applicationName = { gen: generation, value: values.application };
     view = f.id;
     markDirty();
     render();
-    say(`Added ${displayId(f)} from the library entry "${entry.name}". Review client-specific details before delivery.`);
+    const filled = values && ['client', 'application'].filter((t) => used[t] && values[t]);
+    const left = values && ['client', 'application'].filter((t) => used[t] && !values[t]).map((t) => `{${t}}`);
+    say(filled?.length
+      ? `Added ${displayId(f)} from "${entry.name}", with the ${filled.join(' and ')} name${filled.length > 1 ? 's' : ''} filled in.${left.length ? ` ${left.join(' and ')} ${left.length > 1 ? 'are' : 'is'} still to fill.` : ''} Review client-specific details before delivery.`
+      : `Added ${displayId(f)} from the library entry "${entry.name}". Review client-specific details before delivery.`);
   }
 
   async function onLibraryFile(e) {
@@ -2558,14 +2709,16 @@ ${e.title}`.toLowerCase().includes(q));
     // one heading says where the report stands; suggestions link to the
     // place that fixes them; facts about saving sit with the actions, details on request.
     const failing = warnings.filter((w) => /export will fail/.test(w.text));
+    const tokens = warnings.filter((w) => w.kind === 'token');
+    const tokenNote = tokens.length ? ` ${tokens.length === 1 ? 'One item below is' : `${tokens.length} items below are`} about an unfilled {client} or {application}.` : '';
     const fix = (w) => w.go && h('button', { type: 'button', class: 'linkish go', 'aria-label': `Fix: ${w.where}`, onclick: () => go(w.go) }, 'Fix');
     const blocked = recovery || failing.length;
     return h('section', { class: 'panel review' },
       h('h1', { 'data-testid': 'review-state' }, blocked ? 'Cannot export yet' : warnings.length ? 'Almost ready' : 'Ready to export'),
       recovery ? h('p', {}, `The project is over the ${CAP} limit. Remove a screenshot or some text first; the notice at the top says by how much.`) : null,
       warnings.length
-        ? h('div', {}, h('p', { class: 'sub' }, `${warnings.length === 1 ? '1 thing' : `${warnings.length} things`} you may want to look at. ${failing.length ? 'Those marked in red stop the export; the others do not.' : 'None of them stop the export.'}`),
-          h('ul', { class: 'warnings', 'data-testid': 'warnings' }, ...[...failing, ...warnings.filter((w) => !failing.includes(w))].map((w) =>
+        ? h('div', {}, h('p', { class: 'sub' }, `${warnings.length === 1 ? '1 thing' : `${warnings.length} things`} you may want to look at. ${failing.length ? 'Those marked in red stop the export; the others do not.' : 'None of them stop the export.'}${tokenNote}`),
+          h('ul', { class: 'warnings', 'data-testid': 'warnings' }, ...[...failing, ...tokens, ...warnings.filter((w) => !failing.includes(w) && !tokens.includes(w))].map((w) =>
             h('li', { class: failing.includes(w) ? 'fails' : '' }, h('span', { class: 'wdot', 'aria-hidden': 'true' }, icon('alert', 'icon sm')), h('span', {}, h('strong', {}, w.where), ': ', w.text), fix(w))),
             passedLine(warnings)))
         : h('p', { class: 'sub', 'data-testid': 'warnings-none' }, 'Nothing to look at. This does not certify the report; read it before you send it.'),
@@ -2590,8 +2743,8 @@ ${e.title}`.toLowerCase().includes(q));
   function passedLine(warnings) {
     const has = (re) => warnings.some((w) => re.test(w.text));
     const ok = [
-      !has(/\[\[/) ? 'every fill-in field is filled' : null,
-      !has(/placeholder text/) ? 'no example text left' : null,
+      !has(/\[\[/) && !warnings.some((w) => w.kind === 'token') ? 'every fill-in field is filled' : null,
+      !has(/placeholder text/) ? 'no example text left (TODO, TBD, lorem ipsum, [insert …])' : null,
       !has(/no caption/) ? 'every screenshot has a caption' : null,
       doc.project.sections.report.find((x) => x.key === 'contents')?.enabled ? 'table of contents included' : null].filter(Boolean);
     if (!ok.length) return null;
