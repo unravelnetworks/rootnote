@@ -37,22 +37,36 @@ test('an empty value leaves its token; case variants and unknown names stay lite
   assert.equal(fillText('ש {client} 😀', { client: 'שלום 𝄞' }), 'ש שלום 𝄞 😀');
 });
 
-test('the reverse offer: exact matches with context, ticks only for whole words in prose', () => {
-  const e = { title: 'Acme portal leaks data', affectedAssets: ['acme.example', 'Acme API'], description: 'Acme users and Acmeville staff', impact: '', threat: '', recommendation: '',
-    formats: {}, details: [{ type: 'text', text: 'Host: Acme', format: 'code' }], references: [{ title: 'Acme advisory', url: 'https://acme.example/Acme' }] };
-  const m = findName(e, 'Acme');
-  assert.deepEqual(m.map((x) => x.key), ['title', 'affectedAssets.1', 'description', 'description', 'details.0', 'references.0']);
-  assert.equal(m[3].whole, false, 'Acmeville is a longer word');
-  assert.deepEqual(defaultTicks(m, 'Acme'), m.map(() => false), 'one subword match: nothing ticked');
-  const clean = { ...e, description: 'Acme users' };
-  const m2 = findName(clean, 'Acme');
-  assert.deepEqual(defaultTicks(m2, 'Acme'), [true, false, true, false, false], 'title and prose only; not assets, code or references');
-  assert.deepEqual(defaultTicks(findName({ ...clean, title: 'IT team' }, 'IT'), 'IT'), [false], 'names under three characters: nothing ticked');
-  const out = replaceMatches(clean, m2, [true, true, true, false, false]);
+test('the reverse offer: whole words in prose only, with context; code, assets and references never', () => {
+  const e = { title: 'Acme portal leaks data', affectedAssets: ['Acme API'], description: 'Acme users and Acmeville staff', impact: '', threat: '', recommendation: 'Ask Acme.',
+    formats: { recommendation: 'code' }, details: [{ type: 'text', text: 'Host: Acme', format: 'code' }, { type: 'text', text: 'Acme confirmed.', format: 'plain' }],
+    references: [{ title: 'Acme advisory', url: 'https://acme.example/Acme' }] };
+  const found = findName(e, 'Acme');
+  assert.deepEqual(found.matches.map((x) => x.key), ['title', 'description', 'details.1']);
+  assert.equal(found.partial, true, 'Acmeville is a longer word: not offered, and noted');
+  assert.deepEqual(defaultTicks(found), [false, false, false], 'nothing ticked when the name is also inside a longer word');
+  const clean = findName({ ...e, description: 'Acme users' }, 'Acme');
+  assert.equal(clean.partial, false);
+  assert.deepEqual(defaultTicks(clean), [true, true, true]);
+  const out = replaceMatches({ ...e, description: 'Acme users' }, clean.matches, [true, false, true]);
   assert.equal(out.title, '{client} portal leaks data');
-  assert.equal(out.affectedAssets[1], '{client} API');
-  assert.equal(out.description, '{client} users');
-  assert.equal(out.details[0].text, 'Host: Acme', 'unticked: unchanged');
-  assert.equal(out.references[0].url, 'https://acme.example/Acme');
-  assert.equal(clean.title, 'Acme portal leaks data', 'input not changed');
+  assert.equal(out.description, 'Acme users', 'unticked: unchanged');
+  assert.equal(out.details[1].text, '{client} confirmed.');
+  assert.equal(out.details[0].text, 'Host: Acme');
+  assert.equal(out.affectedAssets[0], 'Acme API');
+  assert.equal(e.title, 'Acme portal leaks data', 'input not changed');
+});
+
+test('the reverse offer: no names under three characters, a bounded list, whole characters at the edges', () => {
+  assert.deepEqual(findName({ title: 'IT team', description: 'A'.repeat(20000) }, 'IT').matches, []);
+  assert.deepEqual(findName({ title: 'A', description: 'A '.repeat(1000) }, 'A').matches, []);
+  const many = findName({ title: 'x', description: 'Acme '.repeat(150) }, 'Acme');
+  assert.equal(many.matches.length, 100);
+  assert.equal(many.more, 50, 'the rest are counted, not listed, and not changed');
+  // Letters outside the basic range, combining marks and RTL letters count as part of a word.
+  assert.equal(findName({ title: '\u{10400}Acme\u{10400}' }, 'Acme').matches.length, 0);
+  assert.equal(findName({ title: 'Acmé x' }, 'Acme').matches.length, 0);
+  assert.equal(findName({ title: 'שAcme' }, 'Acme').matches.length, 0);
+  assert.equal(findName({ title: 'Acme_x 1Acme' }, 'Acme').matches.length, 0);
+  assert.equal(findName({ title: '(Acme), "Acme". 😀Acme' }, 'Acme').matches.length, 3, 'punctuation and emoji are boundaries');
 });

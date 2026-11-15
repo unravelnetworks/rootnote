@@ -14,7 +14,7 @@ import {
 import { h, icon, confirmDialog, choiceDialog, textDialog, downloadBytes, readFileBytes, setRuntimeStyle } from './dom.js';
 import { createEmptyLibrary, openLibraryFile, checkLibrary, serializeLibrary, entryFromFinding, findingFromEntry, mergeLibraries, capEntryName, LIBRARY_LIMITS, LIBRARY_VERSION } from '../app/library.js';
 import { STARTER_LIBRARY, countPrompts } from '../app/starter-library.js';
-import { countNameTokens, fillEntry, nameFields, findName, defaultTicks, replaceMatches } from '../app/name-tokens.js';
+import { countNameTokens, fillEntry, nameFields, findName, defaultTicks, replaceMatches, REVERSE_MAX } from '../app/name-tokens.js';
 import { importImageBytes, imageFilesFrom, imageTooLarge } from './images.js';
 import { editImage } from './redact.js';
 import { scanHandle, scanFileList, projectSummary, planBatch, folderNameProblem } from './engagements.js';
@@ -2361,18 +2361,22 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
 
   /** Lists each place the client's name appears in the new library entry, with context and a
    * checkbox; resolves the ticks, or null (Cancel). The finding itself is never changed. */
-  function reverseDialog(entry, client, matches) {
-    const start = defaultTicks(matches, client);
+  function reverseDialog(entry, client, found) {
+    const { matches } = found;
+    const start = defaultTicks(found);
     const boxes = matches.map((m, i) => h('input', { type: 'checkbox', checked: start[i], 'data-testid': 'reverse-match' }));
     const fields = nameFields(entry);
     const rows = matches.map((m, i) => h('label', { class: 'reverse-row' }, boxes[i],
-      h('span', {}, h('strong', {}, fieldName(fields.find((f) => f.key === m.key)), m.code ? ' (code)' : ''), ' ',
-        h('span', { class: m.code ? 'mono' : '' }, `${m.before.length >= 40 ? '…' : ''}${m.before}`, h('mark', {}, client), `${m.after}${m.after.length >= 40 ? '…' : ''}`))));
-    const keep = h('button', { type: 'button', class: 'ghost small-btn', 'data-testid': 'reverse-keep', onclick: () => boxes.forEach((b) => { b.checked = false; }) }, 'Keep as written');
+      h('span', {}, h('strong', {}, fieldName(fields.find((f) => f.key === m.key))), ' ',
+        h('span', {}, `${m.before.length >= 80 ? '…' : ''}${m.before}`, h('mark', {}, client), `${m.after}${m.after.length >= 80 ? '…' : ''}`))));
+    const keep = h('button', { type: 'button', class: 'secondary', 'data-testid': 'reverse-keep', onclick: () => boxes.forEach((b) => { b.checked = false; }) }, 'Keep as written');
     const form = h('form', { method: 'dialog' },
       h('h2', {}, `Save "${entry.name}" to the library`),
       h('p', {}, `${client} appears in this finding. Tick the places to replace with {client} in the library entry. `, h('strong', {}, 'Your finding is not changed.')),
       h('div', { class: 'reverse-list', 'data-testid': 'reverse-list' }, ...rows),
+      found.partial ? h('p', { class: 'hint', 'data-testid': 'reverse-partial' }, `${client} also appears inside longer words; those places are not offered, and nothing is ticked for you.`) : null,
+      found.more ? h('p', { class: 'hint', 'data-testid': 'reverse-more' }, `Only the first ${REVERSE_MAX} places are listed; ${found.more} more stay as written.`) : null,
+      h('p', { class: 'hint' }, 'Only the title and plain text are offered: code, affected assets and references stay as written.'),
       h('div', { class: 'row' }, keep),
       h('p', { class: 'hint' }, 'This replaces only the places you tick. It does not remove other client details from the entry.'),
       h('div', { class: 'row end' }, h('button', { type: 'button', class: 'secondary', onclick: () => dialog.close('') }, 'Cancel'),
@@ -2388,6 +2392,12 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   }
 
   async function saveToLibrary(f) {
+    // Nothing is written if the report, the finding or the library changed during a question.
+    const gen = generation;
+    const rev = revision;
+    const lib = library;
+    const stale = () => gen !== generation || rev !== revision || lib !== library || findingById(f.id) !== f;
+    const STALE = 'Not saved to the library: the report or the library changed while the dialog was open.';
     const linked = libraryLinks.get(f.id);
     const existing = linked && library.entries.find((e) => e.id === linked);
     let id;
@@ -2395,19 +2405,17 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       const choice = await choiceDialog(`"${existing.name}" in the library came from this finding.`, [
         { value: 'replace', label: 'Replace that entry' }, { value: 'new', label: 'Save as a new entry' }]);
       if (!choice) return;
+      if (stale()) { say(STALE, 'error'); return; }
       if (choice === 'replace') id = existing.id;
     }
     let { entry, droppedScreenshots } = entryFromFinding(f, id ? { id, name: existing.name } : {});
     const client = (doc.project.client || '').trim();
-    const matches = findName(entry, client);
-    if (matches.length) {
-      const gen = generation;
-      const rev = revision;
-      const lib = library;
-      const ticked = await reverseDialog(entry, client, matches);
+    const found = findName(entry, client);
+    if (found.matches.length) {
+      const ticked = await reverseDialog(entry, client, found);
       if (!ticked) return;
-      if (gen !== generation || rev !== revision || lib !== library || findingById(f.id) !== f) { say('Not saved to the library: the report or the library changed while the dialog was open.', 'error'); return; }
-      entry = replaceMatches(entry, matches, ticked);
+      if (stale()) { say(STALE, 'error'); return; }
+      entry = replaceMatches(entry, found.matches, ticked);
     }
     const entries = id ? library.entries.map((e) => (e.id === id ? entry : e)) : [...library.entries, entry];
     const note = droppedScreenshots ? ` ${droppedScreenshots} screenshot${droppedScreenshots > 1 ? 's were' : ' was'} not saved: library entries hold text only.` : '';
@@ -2434,10 +2442,10 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
   }
   /** Asks for the names an entry uses; resolves the values or null (Cancel). Shows every field
    * the names change, as plain text. */
-  function fillDialog(entry, used) {
+  function fillDialog(entry, used, start = null, refused = '') {
     const input = (name, value) => h('input', { type: 'text', value, maxlength: LIMITS.line, 'data-testid': `fill-${name}`, spellcheck: 'false' });
-    const fields = { client: used.client ? input('client', doc.project.client || '') : null,
-      application: used.application ? input('application', applicationName.gen === generation ? applicationName.value : '') : null };
+    const fields = { client: used.client ? input('client', start ? start.client : doc.project.client || '') : null,
+      application: used.application ? input('application', start ? start.application : applicationName.gen === generation ? applicationName.value : '') : null };
     const preview = h('div', { class: 'fill-preview', 'data-testid': 'fill-preview', tabindex: '0', 'aria-label': 'Preview of the changed text' });
     const counts = h('p', { class: 'hint', 'data-testid': 'fill-counts', 'aria-live': 'polite' });
     const problem = h('p', { class: 'hint', 'data-kind': 'error', 'data-testid': 'fill-problem', 'aria-live': 'polite' });
@@ -2457,14 +2465,15 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       counts.textContent = `${fills.length ? `Fills ${fills.join(' and ')}.` : 'Nothing is filled.'}${left.length ? ` ${left.join(' and ')} ${left.length > 1 ? 'stay' : 'stays'} as written; Check & export will list ${left.length > 1 ? 'them' : 'it'}.` : ''}`;
       const bad = unusable(v);
       const why = bad ? `the ${bad} name contains a line break or a character a report cannot hold.` : candidateProblem(filled);
-      problem.textContent = why ? `Not added: ${why}${bad ? ' Remove it.' : ' Shorten the name.'}` : '';
+      problem.textContent = why ? `Not added: ${why}${bad ? ' Remove it.' : ' Shorten the name.'}` : refused;
+      refused = '';
       add.disabled = !!why;
     };
     const form = h('form', { method: 'dialog' },
       h('h2', {}, `Add "${entry.name}" to the report`),
       fields.client ? h('label', { class: 'field' }, h('span', {}, 'Client'), fields.client) : null,
       fields.application ? h('label', { class: 'field' }, h('span', {}, 'Application'), fields.application) : null,
-      h('p', { class: 'hint' }, 'Leave a box empty to keep its name as written. The library entry is not changed; reference addresses and other fields are not filled.'),
+      h('p', { class: 'hint' }, 'Leave a box empty to leave {client} or {application} in the text; Check & export then lists it. The library entry is not changed. Reference addresses are not filled.'),
       counts, preview, problem,
       h('div', { class: 'row end' }, h('button', { type: 'button', class: 'secondary', onclick: () => dialog.close('') }, 'Cancel'), add));
     const dialog = h('dialog', { class: 'confirm fill-dialog', 'aria-label': `Add "${entry.name}" to the report` }, form);
@@ -2479,6 +2488,15 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     });
   }
 
+  /** Whether a finding made from `e` would fit the project (checked and undone, nothing kept). */
+  function sizeOk(e) {
+    const f = findingFromEntry(e, doc.project.nextFindingNumber);
+    doc.findings.push(f);
+    const ok = fits();
+    doc.findings.pop();
+    return ok;
+  }
+
   async function insertFromLibrary(entry) {
     if (recovery) { say(`Findings cannot be added while the project is over the ${CAP} limit.`, 'error'); return; }
     if (doc.findings.length >= maxFindings) { say(`Not added: the limit is ${maxFindings} findings per project.`, 'error'); return; }
@@ -2486,11 +2504,13 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
     const used = countNameTokens(entry);
     let source = entry;
     let values = null;
-    if (used.client || used.application) {
+    let refused = '';
+    for (;;) {
+      if (!(used.client || used.application)) break;
       const gen = generation;
       const rev = revision;
       const lib = library;
-      values = await fillDialog(entry, used);
+      values = await fillDialog(entry, used, values, refused);
       if (!values) return;
       if (gen !== generation || rev !== revision || (lib !== library && !STARTER_LIBRARY.entries.includes(entry))) { say('Not added: the report or the library changed while the dialog was open.', 'error'); return; }
       if (recovery) { say(`Findings cannot be added while the project is over the ${CAP} limit.`, 'error'); return; }
@@ -2498,7 +2518,9 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       if (!canIssueFinding()) { say('Not added: finding numbering is exhausted for this project.', 'error'); return; }
       source = fillEntry(entry, values);
       const why = candidateProblem(source);
-      if (why) { say(`Not added: ${why}`, 'error'); return; }
+      if (why) { refused = `Not added: ${why}`; continue; }
+      if (!sizeOk(source)) { refused = `Not added: the report would go over ${CAP}. Shorten the names, or remove something from the report first.`; continue; }
+      break;
     }
     const f = findingFromEntry(source, doc.project.nextFindingNumber);
     doc.findings.push(f);
@@ -2686,7 +2708,7 @@ ${e.title}`.toLowerCase().includes(q));
     // place that fixes them; facts about saving sit with the actions, details on request.
     const failing = warnings.filter((w) => /export will fail/.test(w.text));
     const tokens = warnings.filter((w) => w.kind === 'token');
-    const tokenNote = tokens.length ? ` ${tokens.length === 1 ? 'One area still has' : `${tokens.length} areas still have`} an unfilled {client} or {application}.` : '';
+    const tokenNote = tokens.length ? ` ${tokens.length === 1 ? 'One item below is' : `${tokens.length} items below are`} about an unfilled {client} or {application}.` : '';
     const fix = (w) => w.go && h('button', { type: 'button', class: 'linkish go', 'aria-label': `Fix: ${w.where}`, onclick: () => go(w.go) }, 'Fix');
     const blocked = recovery || failing.length;
     return h('section', { class: 'panel review' },
@@ -2719,7 +2741,7 @@ ${e.title}`.toLowerCase().includes(q));
   function passedLine(warnings) {
     const has = (re) => warnings.some((w) => re.test(w.text));
     const ok = [
-      !has(/\[\[/) ? 'every fill-in field is filled' : null,
+      !has(/\[\[/) && !warnings.some((w) => w.kind === 'token') ? 'every fill-in field is filled' : null,
       !has(/placeholder text/) ? 'no example text left' : null,
       !has(/no caption/) ? 'every screenshot has a caption' : null,
       doc.project.sections.report.find((x) => x.key === 'contents')?.enabled ? 'table of contents included' : null].filter(Boolean);

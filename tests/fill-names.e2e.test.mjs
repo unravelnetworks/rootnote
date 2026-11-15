@@ -126,11 +126,12 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`fill n
       const list = await b.evaluate("document.querySelector('[data-testid=warnings]').textContent");
       assert.ok(list.includes(`${disp(11)} ${withNames.title}: Unfilled {client} in Title, Description, Impact and References; {application} in Title, Affected assets, Description and Additional details.`), list.slice(0, 600));
       assert.ok(list.includes(`${disp(10)}`) && /Unfilled \{client\} in Title/.test(list), 'the literal {client} from the application value is flagged too');
-      assert.match(await b.evaluate("document.querySelector('.sub').textContent"), /2 areas still have an unfilled \{client\} or \{application\}\./);
+      assert.match(await b.evaluate("document.querySelector('.sub').textContent"), /2 items below are about an unfilled \{client\} or \{application\}\./);
       assert.equal(await b.evaluate("!!document.querySelector('[data-testid=export]')?.disabled"), false, 'export still possible');
+      assert.equal(/every fill-in field is filled/.test(await b.evaluate("document.querySelector('[data-testid=checks-passed]')?.textContent ?? ''")), false, 'no claim that everything is filled');
     });
 
-    await t.test('the project changing while the dialog is open: nothing is added', async () => {
+    await t.test('the library changing while the dialog is open: nothing is added', async () => {
       await b.evaluate(nav('Finding library'));
       const n = (await b.evaluate(snap)).findings.length;
       await insert('IDOR with names');
@@ -145,6 +146,33 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`fill n
       await b.evaluate("document.querySelector('[data-testid=fill-add]').click()");
       assert.ok(await b.waitFor(`/changed while the dialog was open/.test(${status})`), await b.evaluate(status));
       assert.equal((await b.evaluate(snap)).findings.length, n + 1);
+    });
+
+    await t.test('Escape closes the dialog and adds nothing', async () => {
+      await b.evaluate(nav('Finding library'));
+      const before = await b.evaluate(snap);
+      await insert('IDOR with names');
+      assert.ok(await b.waitFor(dialogOpen));
+      await b.press('Escape');
+      assert.ok(await b.waitFor("!document.querySelector('dialog')"));
+      assert.deepEqual(await b.evaluate(snap), before);
+    });
+
+    await t.test('Additional details over its total text limit once filled is refused', async () => {
+      const big = { ...withNames, id: 'L-' + 'c'.repeat(32), name: 'Long details', details: [{ type: 'text', text: 'x'.repeat(19990) + ' {client}', format: 'plain' }] };
+      const p = join(dir, 'long.rootnote-library.json');
+      writeFileSync(p, serializeLibrary({ ...createEmptyLibrary(), entries: [big] }, { appVersion: '0.4.0' }));
+      await b.setFile('[data-testid=library-input]', p);
+      assert.ok(await b.waitFor("!!document.querySelector('dialog [data-choice=merge]')", 5000), 'asks to add or replace');
+      await b.evaluate("document.querySelector('dialog [data-choice=merge]').click()");
+      assert.ok(await b.waitFor(`!!document.querySelector('[data-entry="${big.id}"] [data-testid=library-insert]')`, 30000), await b.evaluate(status));
+      await b.evaluate(`document.querySelector('[data-entry="${big.id}"] [data-testid=library-insert]').click()`);
+      assert.ok(await b.waitFor(dialogOpen));
+      await type('[data-testid=fill-client]', 'Abc');
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=fill-add]').disabled"), false, '19,990 + 1 + 3 fits');
+      await type('[data-testid=fill-client]', 'A'.repeat(10));
+      assert.match(await b.evaluate("document.querySelector('[data-testid=fill-problem]').textContent"), /Additional details would be longer than 20000 characters in total/);
+      await b.evaluate("[...document.querySelectorAll('dialog button')].find((x) => x.textContent === 'Cancel').click()");
     });
 
     await t.test('Save to library offers {client} where the name appears; the finding is not changed', async () => {
@@ -166,6 +194,30 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`fill n
       await b.evaluate(nav('Finding library'));
       const names = await b.evaluate("[...document.querySelectorAll('[data-testid=library-list] > *')].map((r) => r.textContent).join('\\n')");
       assert.ok(names.includes('{client} reset tokens disclosed'), names.slice(0, 400));
+    });
+    await t.test('a library change during the Replace question: nothing is written', async () => {
+      // The finding added from "IDOR plain" is linked to that entry, so saving asks Replace or New.
+      // Two findings share that title (the sample's and the copy added from the library): the copy is the last.
+      await b.evaluate(`[...document.querySelectorAll('.navitem')].filter((e) => e.textContent.includes(${JSON.stringify(plain.title.slice(0, 20))})).at(-1).click()`);
+      assert.ok(await b.waitFor(`!!document.querySelector('[data-testid=save-to-library]')`));
+      await b.evaluate("document.querySelector('[data-testid=save-to-library]').click()");
+      assert.ok(await b.waitFor("!!document.querySelector('dialog [data-choice=replace]')"), 'asks Replace or New');
+      await b.evaluate(nav('Finding library'));
+      await b.evaluate(`(() => { const i = document.querySelector('[data-entry="${plain.id}"] [data-testid=library-name]'); i.value = 'NEW LIBRARY NAME'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await b.evaluate("document.querySelector('dialog [data-choice=replace]').click()");
+      assert.ok(await b.waitFor(`/Not saved to the library: the report or the library changed/.test(${status})`), await b.evaluate(status));
+      assert.equal(await b.evaluate(`document.querySelector('[data-entry="${plain.id}"] [data-testid=library-name]').value`), 'NEW LIBRARY NAME', 'the newer name is kept');
+    });
+
+    await t.test('the remembered application name is forgotten when another report is opened', async () => {
+      await b.setFile('[data-testid=open-input]', samplePath);
+      if (await b.waitFor("!!document.querySelector('dialog.confirm [data-confirm]')", 3000)) await b.evaluate("document.querySelector('dialog.confirm [data-confirm]').click()");
+      assert.ok(await b.waitFor(`${snap}.findings.length === 8`, 60000));
+      await b.evaluate(nav('Finding library'));
+      await insert('IDOR with names');
+      assert.ok(await b.waitFor(dialogOpen));
+      assert.equal(await b.evaluate("document.querySelector('[data-testid=fill-application]').value"), '');
+      await b.evaluate("[...document.querySelectorAll('dialog button')].find((x) => x.textContent === 'Cancel').click()");
     });
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {

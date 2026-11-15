@@ -50,31 +50,38 @@ export function fillEntry(entry, values) {
 }
 
 // ---- The other way: a name in a finding, offered for replacement with {client} ----
+// Only prose is offered: the title, plain text sections and plain Additional details blocks.
+// Never code, affected assets or references; never part of a longer word; never a name shorter
+// than three characters. At most REVERSE_MAX places are listed, and only listed places change.
 
-const WORD = /[\p{L}\p{N}_]/u;
-/** Every exact, case-sensitive occurrence of `name` in a library entry's fields (keys follow the
- * entry, whose details hold text blocks only): { key, label, start, end, before, after, whole,
- * code, line, prose }. */
+export const REVERSE_MIN = 3;
+export const REVERSE_MAX = 100;
+const WORD = /[\p{L}\p{N}\p{M}_]/u;
+// The whole characters next to a match (a surrogate pair is one character).
+const charBefore = (t, at) => (at <= 0 ? '' : String.fromCodePoint(t.codePointAt(at >= 2 && /[\uDC00-\uDFFF]/.test(t[at - 1]) && /[\uD800-\uDBFF]/.test(t[at - 2]) ? at - 2 : at - 1)));
+const charAfter = (t, end) => (end >= t.length ? '' : String.fromCodePoint(t.codePointAt(end)));
+/** The places `name` could become {client} in a library entry (keys follow the entry, whose
+ * details hold text blocks only): { matches: [{ key, start, end, before, after }], partial,
+ * more }. partial: the name also occurs inside a longer word (those places are not offered);
+ * more: whole-word places beyond REVERSE_MAX (not listed, not changed). */
 export function findName(entry, name) {
-  const out = [];
-  if (!name) return out;
+  const out = { matches: [], partial: false, more: 0 };
+  if (!name || name.length < REVERSE_MIN) return out;
   for (const f of nameFields(entry)) {
+    if (!(f.key === 'title' || (f.kind !== 'line' && !f.code))) continue;
     for (let at = f.text.indexOf(name); at >= 0; at = f.text.indexOf(name, at + name.length)) {
       const end = at + name.length;
-      out.push({ key: f.key, label: f.label, start: at, end, whole: !WORD.test(f.text[at - 1] ?? '') && !WORD.test(f.text[end] ?? ''),
-        before: f.text.slice(Math.max(0, at - 40), at), after: f.text.slice(end, end + 40), code: !!f.code, line: f.kind === 'line', prose: f.kind !== 'line' && !f.code });
+      if (WORD.test(charBefore(f.text, at)) || WORD.test(charAfter(f.text, end))) { out.partial = true; continue; }
+      if (out.matches.length >= REVERSE_MAX) { out.more++; continue; }
+      out.matches.push({ key: f.key, start: at, end, before: f.text.slice(Math.max(0, at - 80), at), after: f.text.slice(end, end + 80) });
     }
   }
   return out;
 }
 
-/** Which matches start ticked: none if any match is part of a longer word or the name is shorter
- * than three characters; otherwise only whole-word matches in prose (not code, assets or titles
- * of references). */
-export function defaultTicks(matches, name) {
-  if (name.length < 3 || matches.some((m) => !m.whole)) return matches.map(() => false);
-  return matches.map((m) => m.prose || m.key === 'title');
-}
+/** Which places start ticked: none when the name also occurs inside a longer word (the tester
+ * decides); otherwise all of them, since every listed place is a whole word in prose. */
+export const defaultTicks = (found) => found.matches.map(() => !found.partial);
 
 /** A copy of the entry with the ticked matches replaced by {client}. */
 export function replaceMatches(entry, matches, ticked) {
