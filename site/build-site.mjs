@@ -22,7 +22,7 @@ const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
 
 const SITE_URL = 'https://rootnote.unravelnetworks.com';
-const NAV = [['/', 'Rootnote'], ['/guide/', 'Guide'], ['/privacy/', 'Privacy'], ['/licence/', 'Licence'], ['/security/', 'Security']];
+const NAV = [['/', 'Rootnote'], ['/guide/', 'Guide'], ['/alternatives/', 'Compare'], ['/privacy/', 'Privacy'], ['/licence/', 'Licence'], ['/security/', 'Security']];
 const DESCRIPTION = 'Rootnote turns pentest screenshots and notes into an editable Word report. Free and open source, one HTML file, works offline.';
 // Static JSON-LD is a data block, not script: the site CSP needs no script-src for it.
 // '<' is escaped so no value can close the element.
