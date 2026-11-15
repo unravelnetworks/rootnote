@@ -1,6 +1,6 @@
 {
   "app": "dist/rootnote.html",
-  "appSha256": "2246b6de8c2225c80823eb16b0f18f2082e09e918f435bc26e8b01b68e5ec854",
+  "appSha256": "970c8fc4f95f36f7fb56d198895dee12909782503584b642ae27d678dc083fd7",
   "viewport": "1280x1000@2",
   "theme": "light",
   "shots": [
@@ -20,7 +20,7 @@
       "name": "nav",
       "steps": "sample open: the section list with Details & cover, the first finding and Preview report marked",
       "size": "277x657",
-      "sha256": "3337d0b873dcb9a50056c5c471ac3d9a3f1fb6bf6539167845831882a269b0da"
+      "sha256": "f05a26bbf504d642ac499f98e6d29ea376535b9da63a07ecd95c0f9c2671c582"
     },
     {
       "name": "title",
@@ -50,7 +50,7 @@
       "name": "export",
       "steps": "Check & export: paper size and the Word export button, marked 1",
       "size": "356x86",
-      "sha256": "0853db331348439aca587a0c3cf1102a38cc0a7e8441ac71aadfb3943873c574"
+      "sha256": "92bc730d81d579e728883e73f548b343d74a6735a9af6db930b57ac122be8206"
     },
     {
       "name": "new-report",
@@ -68,7 +68,7 @@
       "name": "blocks",
       "steps": "Additional details, pointer between blocks: the insert bar with Screenshot marked 1, and the first text block",
       "size": "551x150",
-      "sha256": "6c107a91a8c17633366684e85d2f29341a5d9c7418fc09fa7d7807285b2e4494"
+      "sha256": "32c98b23b095d0e89d3e078d80161d4f472b4685a833a17c3e645ab9e0ecf01e"
     },
     {
       "name": "library",
@@ -80,13 +80,13 @@
       "name": "screenshot-card",
       "steps": "a screenshot in Additional details; Caption marked 1, Black out or crop marked 2",
       "size": "586x208",
-      "sha256": "3cd9445e58abad04d58e6791c2d0d07933f598ebf2e765474f360d2559036a4b"
+      "sha256": "3500e6db77ccb9a9bc98aa4fba621c81f40851458b4f2dd6ff855e749c2e1626"
     },
     {
       "name": "redact",
       "steps": "screenshot editor: the tool buttons and the top of the picture; Black out marked 1",
       "size": "369x248",
-      "sha256": "c17a71020e6c4c87845b71b075cad27f531129e08c622f0b846b765edfcd78b4"
+      "sha256": "a5eb6462286923522c1987eac869e64e9c84d7af7a6a484cf54b08910d99cbf1"
     },
     {
       "name": "logos",
@@ -110,13 +110,13 @@
       "name": "recovery",
       "steps": "Check & export: Keep a recovery draft switch marked 1",
       "size": "798x105",
-      "sha256": "9469f434bc0563d7817ce2b0271d656c3c77e45f66798bae3e1328ab9fbcaeb6"
+      "sha256": "6bbdd4729123ce8fbd6da257fa9f2817ab4e97d31f59c1382455f9de162a87c5"
     },
     {
       "name": "checks",
       "steps": "Check & export: the list of things to look at; first Fix button marked 1",
-      "size": "840x308",
-      "sha256": "db35f344b596eb4ee47bfcbbac7aade4d4869697db403e7ea6caf2db063ecca8"
+      "size": "840x329",
+      "sha256": "781db62c771db42ca6ba3cd4d03f64873973030962e79771728f4b9371bdb6e2"
     }
   ],
   "browser": "Chrome/156.0.8078.81"
