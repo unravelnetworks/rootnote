@@ -1,5 +1,5 @@
-# Published Rootnote 0.4.0 (source tag v0.4.0, commit e1bc998), 2026-11-15
-e7850737c9e1423d1b8281834a51ef9a6e383e9fcfd88f9748d651208df0ff28 /app/
-2c5197e736dae1c198bff2dc279f3f697d8cc1d56529ee7afce7e11a5e0d8bbc /download/rootnote-0.4.0.zip
-dda106c508e12dae2c2d177295d11bcbd20d1a579877c20924fbadebf40c66be /download/rootnote-0.4.0-sample-report.docx
-00470d2102ed6036835e1071967a7928e23cba30b735f419cc1a47ded74e9761 /download/rootnote-0.4.0-sample-report-cvss40.docx
+# Published Rootnote 0.5.0 (source tag v0.5.0, commit 10bf364), 2026-11-15
+28d0c675b704b9ee1f69f3042579dae08d22e0b91a3647ebc70bb98df2655feb /app/
+92f8c8e14a701e9fafd53f43b8a2daa7b74a84c0da3de459b3e2e5ecf7509fa2 /download/rootnote-0.5.0.zip
+99387e2b465d23d705b360a3c4981e00cae06dd705bf8ffd058a0e1642efc9af /download/rootnote-0.5.0-sample-report.docx
+7e4fbdf5ecbdaac548aab34c0f052060a37b472aee24a85bf7ab7e680d022cc1 /download/rootnote-0.5.0-sample-report-cvss40.docx
