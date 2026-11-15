@@ -2,7 +2,7 @@
 
 Several tools turn pentest findings into a report. This page compares what each project documents, so you can pick the one that fits your work. Sometimes that is not Rootnote.
 
-Every fact about another tool links to that project's own repository or documentation. We did not run the tools side by side, and we do not rank them. Last checked: 11 November 2026.
+Every fact about another tool links to that project's own repository or documentation. We did not run the tools side by side, and we do not rank them. Other tools' documentation last checked: 11 November 2026. Rootnote details updated for 0.5.0 on 15 November 2026.
 
 ## At a glance
 
@@ -60,6 +60,8 @@ Base means the CVSS Base metric group only (CVSS-B). We have not checked whether
 - Works offline once downloaded.
 - Exports an editable Word report with styles, numbered figures and a linked findings summary, plus the whole report as Markdown and the findings as CSV.
 - CVSS 3.1 or 4.0 Base scores, one version per report, plus CWE, affected assets and references for each finding.
+- Your own finding library, kept in a separate file, plus 12 OWASP-referenced starter findings. If an entry contains `{client}` or `{application}`, Rootnote asks for the names and previews the changed text before you add it.
+- Paste screenshots as you go, then move each one to the finding it belongs to.
 - Limits: Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows with 64 GB of RAM. Large reports need a lot of memory.
 - Tested on Windows in Chrome, Edge and Firefox. Basic use in Safari on macOS has been checked by hand.
 - No independent security audit yet. The app runs no AI models.

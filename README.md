@@ -17,9 +17,9 @@ Open source means you can read, build and check the code. Rootnote has not had a
 ## What it does
 
 - Findings with severity or CVSS Base scores (CVSS 3.1 or 4.0, one version per report), CWE, affected assets, references and your own sections.
-- Paste screenshots into a finding; black out, crop and annotate them in the app.
+- Paste screenshots into a finding, or move them to another finding later; black out, crop and annotate them in the app.
 - Word output with real styles, numbered figure captions and a findings summary that links to each finding.
-- A built-in sample report (fictional client, synthetic evidence) and starter findings.
+- A built-in sample report (fictional client, synthetic evidence), starter findings, and your own finding library with previewed filling of `{client}` and `{application}` placeholders.
 
 Tested up to 150 findings, 400 screenshots and a 256 MB project file, on Windows in Chrome, Edge and Firefox, on a machine with 64 GB of RAM. Reports that large need a lot of memory, and Firefox needs the most. On a machine with less RAM, work in Chrome or Edge and keep large reports smaller. These are sizes we have tested, not a paid tier. Everything in Rootnote is free. Tell us if the limits prevent your normal work.
 
