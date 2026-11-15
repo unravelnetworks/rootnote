@@ -75,9 +75,14 @@ for (const [engine, port] of [['chrome', 9597], ['firefox', 9697]]) test(`starte
     await t.test('add a starter entry, copy one, and see its prompts in Check & export', { skip: !STARTER_LIBRARY.entries.length && 'starter content not in this build yet' }, async () => {
       const entry = STARTER_LIBRARY.entries[0];
       await b.evaluate("document.querySelector('[data-testid=starter-insert]').click()");
+      // Starter 01 is the worked example for {client}: adding it asks for the name.
+      assert.ok(await b.waitFor("!!document.querySelector('[data-testid=fill-client]')"), 'asks for the client name');
+      await b.evaluate("(() => { const i = document.querySelector('[data-testid=fill-client]'); i.value = 'Example Client Ltd'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+      await b.evaluate("document.querySelector('[data-testid=fill-add]').click()");
       assert.ok(await b.waitFor(`${snap}.findings.length === 1`));
       const f = (await b.evaluate(snap)).findings[0];
       assert.equal(f.title, entry.title);
+      assert.ok(entry.impact.startsWith('For {client}, ') && f.impact.startsWith('For Example Client Ltd, '), 'the name is filled in');
       assert.equal(f.rating, null);
       assert.equal(f.cvss, null);
       await b.evaluate(nav('Finding library'));
