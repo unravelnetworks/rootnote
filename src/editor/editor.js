@@ -6,7 +6,7 @@
 // (bumped by New/Open) and `revision` (bumped by every edit) detect changes meanwhile.
 import {
   createEmptyProject, openProjectFile, openProjectData, decodeImageInBrowser, sanitizeText, sanitizeLine, savedSize,
-  findingId, imageId, resolveFindingPrefix, defaultFormats, screenshotRefs, textBlock, imageBlock, detailsTextLength,
+  findingId, imageId, resolveFindingPrefix, defaultFormats, screenshotRefs, textBlock, imageBlock, newBlockId, detailsTextLength,
   LIMITS, megabytes, SEVERITIES, SCORING_MODES, LABEL_KEYS_V6, projectFromSettings, SETTINGS_KEPT, SETTINGS_DROPPED,
   CUSTOM_LIMITS, customKey, newCustomSectionId, cweErrors, capUnits,
   FINDING_STATUSES, ENGAGEMENT_STATUSES, REFERENCE_LIMITS, referenceTitleErrors, referenceUrlErrors,
@@ -450,7 +450,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       ),
       h('button', { type: 'button', class: 'add', 'data-testid': 'add-finding', disabled: doc.findings.length >= maxFindings || !canIssueFinding(), onclick: addFinding },
         ...(doc.findings.length >= maxFindings ? [`Limit of ${maxFindings} findings reached`] : [icon('plus'), 'New finding'])),
-      doc.findings.length >= maxFindings && maxFindings === LIMITS.findings ? h('p', { class: 'hint' }, FINDINGS_FULL) : null,
+      // replaceChildren prints null as text, unlike h(): spread an empty list instead.
+      ...(doc.findings.length >= maxFindings && maxFindings === LIMITS.findings ? [h('p', { class: 'hint' }, FINDINGS_FULL)] : []),
       h('ul', {}, item('library', 'Finding library', h('span', { class: 'fid' }, `${library.entries.length}${libraryDirty ? ' •' : ''}`))),
       h('p', { class: 'navhead' }, 'Output'),
       h('ul', {}, item('preview', 'Preview report'), item('export', 'Check & export')),
@@ -1626,6 +1627,100 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
       if (im) doc.images.splice(doc.images.indexOf(im), 1);
     }) || BUDGET_REASON;
   }
+  // ---- Moving a screenshot or text block to another finding ----
+  // The image record and its id stay as they are; only the reference moves. A block keeps
+  // its id unless the destination already uses it (ids are unique per finding). Everything
+  // is checked first and applied in one change, so a refusal changes nothing.
+  const shortTitle = (f) => { const t = f.title.trim(); return t ? (t.length > 48 ? `${t.slice(0, 45)}…` : t) : '(no title)'; };
+  const moveName = (f) => `${displayId(f)} ${shortTitle(f)}`;
+  /** Asks where to move it; resolves { fid, where } or null. */
+  function moveDialog(title, source, image, from) {
+    const label = (key) => sectionConfig('finding', key).label + (sectionConfig('finding', key).enabled ? '' : ' (hidden in the report)');
+    const finding = h('select', { 'data-testid': 'move-finding' },
+      ...doc.findings.filter((g) => g !== source).map((g) => h('option', { value: g.id }, moveName(g))));
+    const radio = (key) => h('label', { class: 'check' },
+      h('input', { type: 'radio', name: 'move-where', value: key, checked: from === key, 'data-testid': `move-to-${key}` }), ` ${label(key)}`);
+    const place = image ? h('fieldset', { class: 'move-where' }, h('legend', {}, 'Put it in'), radio('evidence'), radio('details'))
+      : h('p', { class: 'hint' }, `It goes at the end of ${label('details')}.`);
+    const form = h('form', { method: 'dialog' },
+      h('h2', {}, title),
+      h('label', { class: 'field' }, h('span', {}, 'Finding'), finding),
+      place,
+      h('div', { class: 'row end' },
+        h('button', { type: 'button', class: 'secondary', onclick: () => dialog.close('') }, 'Cancel'),
+        h('button', { type: 'submit', 'data-testid': 'move-confirm' }, 'Move')));
+    const dialog = h('dialog', { class: 'confirm', 'aria-label': title }, form);
+    form.addEventListener('submit', (e) => { e.preventDefault(); dialog.close('move'); });
+    return new Promise((resolve) => {
+      dialog.addEventListener('close', () => {
+        const where = image ? form.querySelector('input[name=move-where]:checked')?.value : 'details';
+        dialog.remove();
+        resolve(dialog.returnValue === 'move' && finding.value && where ? { fid: finding.value, where } : null);
+      });
+      document.body.append(dialog);
+      dialog.showModal();
+      finding.focus();
+    });
+  }
+  /** item: { image, from: 'evidence' | 'details', block } (block for anything in details). */
+  async function moveToFinding(source, item, after) {
+    if (recovery) { say('Moving to another finding is not available while the project is over the limit, because Undo would not be possible. Remove something first.', 'error'); return; }
+    const gen = generation;
+    const rev = revision;
+    const sid = source.id;
+    const what = item.image ? `screenshot ${item.image.id}` : 'text block';
+    const answer = await moveDialog(item.image ? `Move screenshot ${item.image.id} to another finding` : 'Move this text block to another finding', source, !!item.image, item.from);
+    if (!answer) return;
+    if (gen !== generation) { say('This report was replaced while the dialog was open, so nothing was moved.', 'error'); return; }
+    if (rev !== revision) { say('The report changed while the dialog was open, so nothing was moved.', 'error'); return; }
+    const src = findingById(sid);
+    const dst = findingById(answer.fid);
+    if (!src) { say('The finding it was in is no longer in this report, so nothing was moved.', 'error'); return; }
+    if (!dst || dst === src) { say('That finding is no longer in this report, so nothing was moved. Choose another finding.', 'error'); return; }
+    const to = answer.where;
+    const at = item.from === 'evidence' ? src.evidence.indexOf(item.image.id) : blocksOf(src).indexOf(item.block);
+    if (at < 0 || (item.image && !doc.images.includes(item.image))) { say('The report changed while the dialog was open, so nothing was moved.', 'error'); return; }
+    const details = sectionConfig('finding', 'details').label;
+    // The destination block: the moved one (fresh id on a clash), or a new wrapper for a gallery screenshot.
+    let block = null;
+    if (to === 'details') {
+      if (!roomForBlocks(dst)) { say(`${displayId(dst)} already holds ${LIMITS.detailBlocks} blocks in ${details}, the most one finding can hold. Nothing has been moved. Remove a block there${item.image ? ', or put this one in Evidence instead' : ''}.`, 'error'); return; }
+      if (!item.image && detailsTextLength(dst) + item.block.text.length > LIMITS.text) { say(`This text block does not fit in ${displayId(dst)}: its ${details} would go over the text limit for one finding. Nothing has been moved.`, 'error'); return; }
+      const taken = new Set(blocksOf(dst).map((b) => b.id));
+      block = item.block ?? imageBlock(item.image.id);
+      while (taken.has(block.id)) block = { ...block, id: newBlockId() };
+    }
+    const dstHad = Object.hasOwn(dst, 'details');
+    const detach = () => { if (item.from === 'evidence') src.evidence.splice(at, 1); else src.details.splice(at, 1); };
+    const reattach = () => { if (item.from === 'evidence') src.evidence.splice(at, 0, item.image.id); else src.details.splice(at, 0, item.block); };
+    const attach = () => { if (to === 'evidence') dst.evidence.push(item.image.id); else { if (!dstHad) dst.details = []; dst.details.push(block); } };
+    const unattach = () => { if (to === 'evidence') dst.evidence.pop(); else { dst.details.pop(); if (!dstHad) delete dst.details; } };
+    const before = savedBytes();
+    detach(); attach();
+    if (!fits(before)) {
+      unattach(); reattach();
+      say(item.image && to === 'details' && item.from === 'evidence'
+        ? `Moving this would take the project over ${CAP}. Putting a screenshot in ${details} wraps it in a block, which makes the saved file slightly larger. Nothing has been moved. Put it in Evidence instead, or remove a screenshot you no longer need.`
+        : `Moving this would take the project over ${CAP}, because a move changes the saved file slightly. Nothing has been moved. Removing a screenshot you no longer need is usually the quickest fix.`, 'error');
+      return;
+    }
+    markDirty();
+    after();
+    const hidden = (key) => (sectionConfig('finding', key).enabled ? '' : ` ${sectionConfig('finding', key).label} is hidden in the report.`);
+    const place = (key, f) => `${moveName(f)}, in ${sectionConfig('finding', key).label}`;
+    const section = main.querySelector(`[data-section=${item.from}]`);
+    const cards = section ? [...section.querySelectorAll(item.from === 'evidence' ? '[data-image]' : '[data-block]')] : [];
+    const back = cards[Math.min(at, cards.length - 1)] || section?.querySelector('button');
+    focusIn(back);
+    offerUndo(`Moved ${what} to ${place(to, dst)}.${hidden(to)}`, () => {
+      const undoBefore = savedBytes();
+      unattach(); reattach();
+      if (!fits(undoBefore)) { detach(); attach(); return `there is no longer room for this ${item.image ? 'screenshot' : 'text block'} in ${displayId(src)}. It is still in ${displayId(dst)}.`; }
+      markDirty();
+      say(`Moved ${what} back to ${place(item.from, src)}.`, 'info', { fade: true });
+      return true;
+    }, () => showRestored(sid, item.from === 'evidence' ? `[data-section=evidence] [data-image="${item.image.id}"]` : `[data-block="${item.block.id}"]`), back);
+  }
   /** Back to the view that shows the restored item, then focus it. */
   function showRestored(where, selector) {
     if (view !== where) view = where;
@@ -1772,7 +1867,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
           h('span', { class: 'block-tools' },
             h('button', { type: 'button', class: 'ghost iconbtn', 'data-testid': 'block-copy', 'aria-label': 'Copy this block\'s text', title: 'Copy text', onclick: () => copyText(b.text, 'text') }, icon('copy')),
             blockMenu('text block', f.details, k, 'text block', redrawAll, [
-              [b.format === 'code' ? 'Change to plain text' : 'Change to code (exactly as typed)', () => { if (setField(b, 'format', b.format === 'code' ? 'plain' : 'code')) { redrawAll(); details.querySelector(`[data-block="${b.id}"] textarea`)?.focus(); } }, { 'data-testid': 'block-format' }]],
+              [b.format === 'code' ? 'Change to plain text' : 'Change to code (exactly as typed)', () => { if (setField(b, 'format', b.format === 'code' ? 'plain' : 'code')) { redrawAll(); details.querySelector(`[data-block="${b.id}"] textarea`)?.focus(); } }, { 'data-testid': 'block-format' }],
+              doc.findings.length > 1 ? ['Move to another finding…', () => moveToFinding(f, { from: 'details', block: b }, redrawAll), { 'data-testid': 'move-finding-open' }] : null],
               remove))) : null,
         area);
       return b ? sortable(el, f.details, k, 'text block', redrawAll) : el;
@@ -1799,8 +1895,7 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
         h('div', { class: 'row sect-head' }, heading('details'), h('span', { class: 'spacer' }),
           blocksOf(f).length ? h('span', { class: 'fmt' }, `${plural(texts, 'text block')} · ${plural(shots, 'screenshot')}`) : null),
         h('p', { class: 'hint details-help' }, 'How to reproduce it, with screenshots where they belong. Ctrl+V pastes a screenshot after the box you are in.'),
-        blocksOf(f).length ? insertBar(null) : null,
-        ...(blocksOf(f).length ? items : [textBox(null, 0), insertBar(null, true)]),
+        ...(blocksOf(f).length ? [insertBar(null), ...items] : [textBox(null, 0), insertBar(null, true)]),
         dropZone(() => ({ where: 'details', after: blocksOf(f).at(-1)?.id ?? null }), h('p', { class: 'hint' }, 'Drop PNG or JPEG files here to add them at the end (up to 2 MB and 16 megapixels each).')));
     };
 
@@ -2083,7 +2178,8 @@ export function createEditor(root, { exportDocx, appVersion, maxFindings = LIMIT
           h('button', { type: 'button', class: 'ghost small-btn', 'data-testid': 'edit-screenshot', onclick: () => editScreenshot(f, im, rerender) }, 'Black out or crop…'),
           h('span', { class: 'spacer' }),
           h('span', { class: 'block-tools' },
-            blockMenu('screenshot', list, k, 'screenshot', rerender, [[`Move to ${other}`, move, { 'data-testid': 'move-section' }]], remove))))), list, k, 'screenshot', rerender);
+            blockMenu('screenshot', list, k, 'screenshot', rerender, [[`Move to ${other}`, move, { 'data-testid': 'move-section' }],
+              doc.findings.length > 1 ? ['Move to another finding…', () => moveToFinding(f, { image: im, from: where, block }, rerender), { 'data-testid': 'move-finding-open' }] : null], remove))))), list, k, 'screenshot', rerender);
   }
 
   // What was done to a screenshot in this session, for the card's chip (not saved anywhere).
