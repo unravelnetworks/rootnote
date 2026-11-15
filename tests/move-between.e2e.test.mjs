@@ -147,7 +147,17 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
       const record = start.images.find((im) => im.id === id);
       const fig0 = figures(start);
       // details (F-001) -> gallery (F-002)
-      await move(`[data-block="${imgBlock.id}"]`, f2.id, 'evidence');
+      // Each path is first undone (exact project back, original wrapper and all), then redone.
+      const undoneThenRedo = async (sel, fid, where, before) => {
+        await move(sel, fid, where);
+        const done = await b.evaluate(snap);
+        await undo();
+        assert.deepEqual(await b.evaluate(snap), before, `exact Undo (${where})`);
+        assert.ok(await b.waitFor(`!!document.querySelector(${JSON.stringify(sel)})`, 10000), 'back in place on screen');
+        await move(sel, fid, where);
+        assert.deepEqual(await b.evaluate(snap), done, 'the same move again gives the same result');
+      };
+      await undoneThenRedo(`[data-block="${imgBlock.id}"]`, f2.id, 'evidence', start);
       let s = await b.evaluate(snap);
       assert.deepEqual(s.findings[1].evidence.at(-1), id);
       assert.equal(s.findings[0].details.some((x) => x.id === imgBlock.id), false);
@@ -158,7 +168,7 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
       // gallery (F-002) -> gallery (F-003)
       await b.evaluate(nav(f2.title.slice(0, 20)));
       assert.ok(await b.waitFor(`!!document.querySelector('[data-section=evidence] [data-image="${id}"]')`));
-      await move(`[data-section=evidence] [data-image="${id}"]`, f3.id, 'evidence');
+      await undoneThenRedo(`[data-section=evidence] [data-image="${id}"]`, f3.id, 'evidence', s);
       s = await b.evaluate(snap);
       assert.equal(s.findings[1].evidence.includes(id), false);
       assert.equal(s.findings[2].evidence.at(-1), id);
@@ -168,15 +178,25 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
       await move(`[data-section=evidence] [data-image="${id}"]`, f1.id, 'details');
       s = await b.evaluate(snap);
       const wrap = s.findings[0].details.at(-1);
+      await undo(); // the new wrapper goes again
+      assert.equal((await b.evaluate(snap)).findings[0].details.some((x) => x.imageId === id), false);
+      assert.equal((await b.evaluate(snap)).findings[2].evidence.at(-1), id);
+      await b.evaluate(nav(f3.title.slice(0, 20)));
+      assert.ok(await b.waitFor(`!!document.querySelector('[data-section=evidence] [data-image="${id}"]')`));
+      await move(`[data-section=evidence] [data-image="${id}"]`, f1.id, 'details');
+      s = await b.evaluate(snap);
+      const wrap2 = s.findings[0].details.at(-1);
+      assert.equal(wrap2.imageId, id);
       assert.equal(wrap.type, 'image');
       assert.equal(wrap.imageId, id);
+      void wrap;
       assert.equal(s.findings[2].evidence.includes(id), false);
       await valid(s);
       // details (F-001) -> details (F-002)
       await b.evaluate(nav(f1.title.slice(0, 20)));
-      assert.ok(await b.waitFor(`!!document.querySelector('[data-block="${wrap.id}"]')`));
+      assert.ok(await b.waitFor(`!!document.querySelector('[data-block="${wrap2.id}"]')`));
       const beforeLast = await b.evaluate(snap);
-      await move(`[data-block="${wrap.id}"]`, f2.id, 'details');
+      await move(`[data-block="${wrap2.id}"]`, f2.id, 'details');
       s = await b.evaluate(snap);
       assert.equal(s.findings[1].details.at(-1).imageId, id);
       await valid(s);
@@ -274,6 +294,13 @@ for (const [engine, port] of [['chrome', 9593], ['firefox', 9693]]) test(`move t
       const saved = JSON.parse(raw);
       assert.equal(saved.findings[2].details.at(-1).imageId, imgBlock.imageId);
       assert.equal(saved.findings[0].details.some((x) => x.imageId === imgBlock.imageId), false);
+      const live = await b.evaluate(snap);
+      await b.navigate(pathToFileURL(dist).href); // a fresh page
+      assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
+      await b.setFile('[data-testid=open-input]', file);
+      assert.ok(await b.waitFor(`${snap}.findings.length === 8 && ${snap}.findings[2].details.at(-1)?.imageId === ${JSON.stringify(imgBlock.imageId)}`, 60000));
+      const reopened = await b.evaluate(snap);
+      assert.deepEqual({ ...reopened, savedAt: '', appVersion: '' }, { ...live, savedAt: '', appVersion: '' }, 'reopened = the project that was saved');
     });
 
     await t.test('with one finding there is no move to another finding', async () => {
@@ -374,6 +401,71 @@ for (const [engine, port] of [['chrome', 9594], ['firefox', 9694]]) test(`a move
     const after = await b.evaluate(snap);
     assert.equal(after.findings[0].evidence.at(-1), 'IMG-9001');
     assert.equal(after.findings[2].evidence.includes('IMG-9001'), false);
+    assert.deepEqual(b.errors, [], 'page errors');
+  } finally {
+    await b.close();
+  }
+});
+
+for (const [engine, port] of [['chrome', 9595], ['firefox', 9695]]) test(`move with 150 findings, the text limit and a pending save in ${engine}`, { skip: !installed(engine) && `${engine} not installed`, timeout: 240000 }, async () => {
+  const doc = structuredClone(sample);
+  const block = { id: 'B-probe-code', type: 'text', format: 'code', text: '  first\tline\r\n- verbatim\rlast \u{1F600}' };
+  doc.findings[0].details.unshift(block);
+  doc.findings[1].details = [{ id: 'B-cap', type: 'text', format: 'plain', text: 'X'.repeat(20000) }, ...doc.findings[1].details.filter((x) => x.type === 'image')];
+  while (doc.findings.length < 150) {
+    const f = structuredClone(doc.findings[0]);
+    f.id = `F-${String(doc.findings.length + 1).padStart(3, '0')}`; f.title = `Other target ${f.id}`; f.details = []; f.evidence = [];
+    doc.findings.push(f);
+  }
+  doc.project.nextFindingNumber = 151;
+  const file = join(fxDir, `150-${engine}.rootnote.json`);
+  writeFileSync(file, JSON.stringify(doc));
+  const b = await launch(engine, port, { savePicker: true });
+  try {
+    await b.navigate(pathToFileURL(dist).href);
+    assert.ok(await b.waitFor("document.getElementById('app').dataset.ready === '1'"));
+    await b.setFile('[data-testid=open-input]', file);
+    assert.ok(await b.waitFor(`${snap}.findings.length === 150`, 60000));
+    await b.evaluate(nav(doc.findings[0].title.slice(0, 20)));
+    assert.ok(await b.waitFor("!!document.querySelector('[data-block=\"B-probe-code\"]')"));
+    const before = await b.evaluate(snap);
+    const open = () => b.evaluate("document.querySelector('[data-block=\"B-probe-code\"] [data-testid=move-finding-open]').click()");
+    // 149 destinations, focus on the finding list, Escape changes nothing.
+    await open();
+    assert.ok(await b.waitFor("!!document.querySelector('[data-testid=move-finding]')"));
+    assert.equal(await b.evaluate("document.querySelector('[data-testid=move-finding]').options.length"), 149);
+    assert.equal(await b.evaluate('document.activeElement.dataset.testid'), 'move-finding');
+    await b.press('Escape');
+    assert.ok(await b.waitFor("!document.querySelector('dialog')"));
+    assert.deepEqual(await b.evaluate(snap), before);
+    // The destination's summed text is already at the limit: refused, nothing changed, still clean.
+    await open();
+    await b.evaluate(`document.querySelector('[data-testid=move-finding]').value = ${JSON.stringify(doc.findings[1].id)}; document.querySelector('[data-testid=move-confirm]').click()`);
+    assert.ok(await b.waitFor("!document.querySelector('dialog')"));
+    assert.match(await b.evaluate(status), /text limit/);
+    assert.deepEqual(await b.evaluate(snap), before);
+    assert.equal(await b.evaluate('window.__fieldnote.isDirty()'), false);
+    // A save waiting on its write: the move comes after the click, so the file has the old place;
+    // Undo before the write completes leaves the project unsaved.
+    await b.evaluate("window.__savedText = null; window.__closed = false; window.showSaveFilePicker = async () => ({ kind: 'file', name: 'probe.json', queryPermission: async () => 'granted', createWritable: async () => ({ write: async (data) => { window.__savedText = await data.text(); await new Promise((r) => { window.__release = r; }); }, close: async () => { window.__closed = true; }, abort: async () => {} }) }); 0");
+    await b.evaluate("document.querySelector('[data-testid=save]').click()");
+    assert.ok(await b.waitFor("typeof window.__release === 'function'"));
+    await open();
+    await b.evaluate(`document.querySelector('[data-testid=move-finding]').value = ${JSON.stringify(doc.findings[2].id)}; document.querySelector('[data-testid=move-confirm]').click()`);
+    assert.ok(await b.waitFor("!document.querySelector('dialog')"));
+    const moved = await b.evaluate(snap);
+    assert.deepEqual(moved.findings[2].details.at(-1), block, 'code text exactly as typed (tabs, CR, CRLF, emoji)');
+    assert.equal(moved.findings[0].details.some((x) => x.id === block.id), false);
+    assert.equal(await b.evaluate('window.__fieldnote.isDirty()'), true);
+    const saved = JSON.parse(await b.evaluate('window.__savedText'));
+    assert.deepEqual(saved.findings[0].details, before.findings[0].details);
+    assert.deepEqual(saved.findings[2].details, before.findings[2].details);
+    await b.evaluate("document.querySelector('[data-testid=undo]').click()");
+    assert.deepEqual(await b.evaluate(snap), before);
+    await b.evaluate('window.__release()');
+    assert.ok(await b.waitFor('window.__closed === true'));
+    assert.ok(await b.waitFor(`/changed the project while it was being saved/.test(${status})`));
+    assert.equal(await b.evaluate('window.__fieldnote.isDirty()'), true);
     assert.deepEqual(b.errors, [], 'page errors');
   } finally {
     await b.close();

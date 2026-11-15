@@ -40,9 +40,9 @@ A screenshot taller than a page, such as a full-page capture, is split across pa
 
 During a test you do not always know which finding a screenshot belongs to. Make one finding, call it something obvious like Scratch, and paste evidence into it as you go, with a line of context under each screenshot.
 
-When you write up, open a screenshot's **More actions** (⋯) and choose **Move to another finding…**. Choose the finding, and whether it goes in **Evidence** or **Additional details**. Text blocks move the same way. Undo is offered straight afterwards.
+When you write up, open a screenshot's **More actions** (⋯) and choose **Move to another finding…**. Choose the finding, and whether it goes in **Evidence** or **Additional details**. Each action moves one screenshot or text block, so move the text that explains it too. Undo is offered straight afterwards.
 
-**Delete the holding finding before you export.** **Check & export** warns about a finding with no severity or CVSS vector, and about an empty description, impact, recommendations or affected assets, so a forgotten Scratch finding will usually appear there. Those are warnings and they do not stop the export, so the last step is yours.
+**After moving everything you need, delete the holding finding before you export.** **Check & export** warns about a finding with no severity or CVSS vector, and about an empty description, impact, recommendations or affected assets, so a forgotten Scratch finding will usually appear there. Those are warnings and they do not stop the export, so the last step is yours.
 
 ## Hidden data is removed
 
